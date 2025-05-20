@@ -1,0 +1,12 @@
+figure.facecolor : 1E2229
+axes.facecolor : 001e26
+axes.edgecolor : black
+savefig.facecolor : black
+
+text.color : 44853A
+xtick.color : black
+ytick.color : black
+grid.color : black
+# lines.color : 16A085
+axes.prop_cycle : cycler('color', ['16A085', 'ffffb3', 'bebada', 'fb8072'])
+

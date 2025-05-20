@@ -105,7 +105,9 @@ class SDRRecorder:
             The sample rate in Hz
         """
 
-        sns.set_theme(style="darkgrid", font_scale=1.2)
+        # sns.set_theme(style="darkgrid", font_scale=1.2)
+        plt.style.use('dark.mplstyle')
+        plt.rcParams['toolbar'] = 'none'
 
         if sample_rate is None:
             sample_rate = self.sample_rate
