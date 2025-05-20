@@ -3,6 +3,7 @@ from SoapySDR import *
 import numpy as np
 from scipy.io.wavfile import write
 from scipy.signal import firwin, lfilter, decimate
+import matplotlib.pyplot as plt
 
 class SDRRecorder:
     def __init__(self, sample_rate=1e6):
@@ -90,6 +91,39 @@ class SDRRecorder:
         # Save audio
         write(output_file, 48000, audio_int16)
         print(f"Saved FM audio to {output_file}")
+
+    def display_fft(self, sample, sample_rate=None):
+        """
+        Display the FFT of a recorded audio sample with zero frequency centered.
+        
+        Parameters:
+        -----------
+        sample : array_like
+            The recorded audio sample
+        sample_rate : int
+            The sample rate in Hz
+        """
+        if sample_rate is None:
+            sample_rate = self.sample_rate
+
+        # Compute the FFT
+        fft_result = np.fft.fft(sample)
+        
+        # Get the frequencies
+        freqs = np.fft.fftfreq(len(sample), 1/sample_rate)
+        
+        # Shift zero frequency to center
+        fft_shifted = np.fft.fftshift(fft_result)
+        freqs_shifted = np.fft.fftshift(freqs)
+        
+        # Plot the centered FFT
+        plt.figure(figsize=(10, 6))
+        plt.plot(freqs_shifted, np.abs(fft_shifted))
+        plt.title('FFT of Recorded Sample (Zero-Centered)')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Magnitude')
+        plt.grid(True)
+        plt.show()
     
     def close(self):
         """Close the SDR device and stream"""
