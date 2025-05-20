@@ -19,7 +19,7 @@ class SDRRecorder:
         # Set initial sample rate
         self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
         
-    def record(self, center_freq, duration_seconds=4, freq_offset=0):
+    def record(self, center_freq, num_samples, freq_offset=0):
         """Record samples from specified frequency for given duration"""
         # Set frequency
         self.sdr.setFrequency(SOAPY_SDR_RX, 0, center_freq)
@@ -32,7 +32,6 @@ class SDRRecorder:
         self.sdr.activateStream(self.rxStream)
         
         # Prepare buffer
-        num_samples = int(self.sample_rate * duration_seconds)
         buff = np.empty(num_samples, np.complex64)
         
         # Read samples in chunks
@@ -61,6 +60,11 @@ class SDRRecorder:
             buff[:read_ptr] = buff[:read_ptr] * np.exp(-1j * 2 * np.pi * freq_offset * t)
         
         return buff[:read_ptr]
+
+    def record_duration(self, center_freq, duration_seconds, freq_offset=0):
+        """Record samples from specified frequency for given duration"""
+        num_samples = int(self.sample_rate * duration_seconds)
+        return self.record(center_freq, num_samples, freq_offset)
     
     def fm_demodulate_and_save(self, samples, output_file="output.wav", cutoff_hz=100e3):
         """Process FM samples and save to WAV file"""
