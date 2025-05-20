@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io.wavfile import write
 from scipy.signal import firwin, lfilter, decimate
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 class SDRRecorder:
     def __init__(self, sample_rate=1e6):
@@ -103,6 +104,9 @@ class SDRRecorder:
         sample_rate : int
             The sample rate in Hz
         """
+
+        sns.set_theme(style="darkgrid", font_scale=1.2)
+
         if sample_rate is None:
             sample_rate = self.sample_rate
 
