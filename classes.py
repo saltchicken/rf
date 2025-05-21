@@ -4,7 +4,11 @@ import numpy as np
 from scipy.io.wavfile import write
 from scipy.signal import firwin, lfilter, decimate
 import matplotlib.pyplot as plt
-import seaborn as sns
+import matplotlib.animation as animation
+from matplotlib.animation import FuncAnimation
+
+plt.style.use('dark.mplstyle')
+plt.rcParams['toolbar'] = 'none'
 
 class SDRRecorder:
     def __init__(self, sample_rate=1e6):
@@ -105,10 +109,6 @@ class SDRRecorder:
             The sample rate in Hz
         """
 
-        # sns.set_theme(style="darkgrid", font_scale=1.2)
-        plt.style.use('dark.mplstyle')
-        plt.rcParams['toolbar'] = 'none'
-
         if sample_rate is None:
             sample_rate = self.sample_rate
 
@@ -130,6 +130,94 @@ class SDRRecorder:
         plt.ylabel('Magnitude')
         plt.grid(True)
         plt.show()
+
+    def animate_fft(self, center_freq, duration_seconds=30, interval=500, freq_offset=0):
+        """
+        Create an animated FFT display that updates at regular intervals.
+        
+        Parameters:
+        -----------
+        center_freq : float
+            Center frequency in Hz
+        duration_seconds : int
+            Total duration to run the animation
+        interval : int
+            Update interval in milliseconds
+        freq_offset : float
+            Frequency offset for shifting
+        """
+        # Set up the figure and axis
+        fig, ax = plt.figure(figsize=(10, 6)), plt.subplot(111)
+        plt.title(f'Real-time FFT at {center_freq/1e6:.1f} MHz')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Magnitude')
+        plt.grid(True)
+        
+        # Set frequency
+        self.sdr.setFrequency(SOAPY_SDR_RX, 0, center_freq)
+        
+        # Setup stream if not already done
+        if self.rxStream is None:
+            self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        
+        # Activate stream
+        self.sdr.activateStream(self.rxStream)
+        
+        # Number of samples to capture per frame
+        frame_samples = int(self.sample_rate * 0.1)  # 100ms of data
+        line, = ax.plot([], [])
+        
+        def init():
+            ax.set_xlim(-self.sample_rate/2, self.sample_rate/2)
+            ax.set_ylim(0, 1)
+            return line,
+        
+        def update(frame):
+            # Capture new data
+            buff = np.empty(frame_samples, np.complex64)
+            read_ptr = 0
+            chunk_size = 4096
+            
+            while read_ptr < frame_samples:
+                to_read = min(chunk_size, frame_samples - read_ptr)
+                sr = self.sdr.readStream(self.rxStream, [buff[read_ptr:read_ptr+to_read]], to_read)
+                if sr.ret > 0:
+                    read_ptr += sr.ret
+                else:
+                    print(f"Error in readStream: {sr.ret}")
+                    break
+            
+            # Apply frequency shift if needed
+            if freq_offset != 0:
+                t = np.arange(read_ptr) / self.sample_rate
+                buff[:read_ptr] = buff[:read_ptr] * np.exp(-1j * 2 * np.pi * freq_offset * t)
+            
+            # Compute FFT
+            fft_result = np.fft.fft(buff[:read_ptr])
+            freqs = np.fft.fftfreq(len(buff[:read_ptr]), 1/self.sample_rate)
+            
+            # Shift zero frequency to center
+            fft_shifted = np.fft.fftshift(fft_result)
+            freqs_shifted = np.fft.fftshift(freqs)
+            
+            # Update plot data
+            line.set_data(freqs_shifted, np.abs(fft_shifted))
+            
+            # Adjust y-axis limit based on current data
+            max_val = np.max(np.abs(fft_shifted))
+            ax.set_ylim(0, max_val * 1.1)
+            
+            return line,
+        
+        # Create animation
+        ani = FuncAnimation(fig, update, frames=int(duration_seconds/(interval/1000)),
+                            init_func=init, blit=True, interval=interval)
+        
+        try:
+            plt.show()
+        finally:
+            # Clean up
+            self.sdr.deactivateStream(self.rxStream)
     
     def close(self):
         """Close the SDR device and stream"""
