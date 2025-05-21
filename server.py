@@ -54,6 +54,8 @@ async def stream_samples(writer, sdr, rxStream):
                 break
     except asyncio.CancelledError:
         pass
+    except KeyboardInterrupt:
+        print("Server shutdown requested (Ctrl+C)")
     finally:
         print("Closing SDR stream.")
         try:
@@ -70,11 +72,9 @@ async def stream_samples(writer, sdr, rxStream):
 
 async def handle_client(reader, writer):
     print(f"Client connected from {writer.get_extra_info('peername')}")
-    # Use global SDR instance instead of creating a new one
     await stream_samples(writer, sdr, rxStream)
 
 async def main():
-    # Set up SDR once at startup
     global sdr, rxStream
     sdr, rxStream = setup_sdr()
     
@@ -83,6 +83,10 @@ async def main():
     try:
         async with server:
             await server.serve_forever()
+    except KeyboardInterrupt:
+        print("Server shutdown requested (Ctrl+C)")
+    except asyncio.CancelledError:
+        print("Server task cancelled")
     finally:
         # Clean up SDR when server exits
         if rxStream:
