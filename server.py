@@ -24,10 +24,10 @@ def setup_sdr():
     sdr.setSampleRate(SOAPY_SDR_RX, 0, SAMPLE_RATE)
     sdr.setFrequency(SOAPY_SDR_RX, 0, FREQ)
     sdr.setGain(SOAPY_SDR_RX, 0, 30)
-    rxStream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-    return sdr, rxStream
+    return sdr
 
 async def stream_samples(writer, sdr, rxStream):
+    rxStream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
     sdr.activateStream(rxStream)
     loop = asyncio.get_running_loop()
     try:
@@ -77,8 +77,8 @@ async def handle_client(reader, writer):
     await stream_samples(writer, sdr, rxStream)
 
 async def main():
-    global sdr, rxStream
-    sdr, rxStream = setup_sdr()
+    global sdr
+    sdr = setup_sdr()
     
     server = await asyncio.start_server(handle_client, host='0.0.0.0', port=PORT)
     print(f"Async SDR server listening on port {PORT}")
