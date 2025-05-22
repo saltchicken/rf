@@ -36,10 +36,11 @@ async def receive_samples():
 
     try:
         # Note: Read one frame before looping to "warm up" the reads
-        length_bytes = await reader.readexactly(4)
-        (length,) = struct.unpack('!I', length_bytes)
+        for i in range(2):
+            length_bytes = await reader.readexactly(4)
+            (length,) = struct.unpack('!I', length_bytes)
 
-        data = await reader.readexactly(length)
+            data = await reader.readexactly(length)
 
         while not stop_event.is_set():
             length_bytes = await reader.readexactly(4)
