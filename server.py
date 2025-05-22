@@ -4,7 +4,7 @@ from SoapySDR import *  # SOAPY_SDR_ constants
 import numpy as np
 import struct
 
-SAMPLE_RATE = 4e6
+SAMPLE_RATE = 2e6
 FREQ = 100e6
 BUFFER_SIZE = 4096  # samples per buffer
 PORT = 5000
