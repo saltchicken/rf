@@ -13,7 +13,7 @@ plt.rcParams['toolbar'] = 'none'
 HOST = '127.0.0.1'
 PORT = 5000
 CHUNK_SIZE = 4096
-ACCUM_CHUNKS = 5
+ACCUM_CHUNKS = 1
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
 SAMPLE_RATE = 10e6
 
@@ -44,11 +44,8 @@ async def receive_samples():
             buffer = np.concatenate((buffer, samples))
 
             if len(buffer) >= FFT_SIZE:
-                fft_result = np.fft.fftshift(np.fft.fft(buffer[:FFT_SIZE]))
-                magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
-
                 try:
-                    sample_queue.put_nowait(magnitude)
+                    sample_queue.put_nowait(buffer[:FFT_SIZE])
                 except queue.Full:
                     pass  # Drop frame if the queue is full
 
@@ -66,7 +63,9 @@ def run_asyncio_loop():
 
 def update(frame):
     if not sample_queue.empty():
-        magnitude = sample_queue.get_nowait()
+        samples = sample_queue.get_nowait()
+        fft_result = np.fft.fftshift(np.fft.fft(samples))
+        magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
         line.set_ydata(magnitude)
     return line,
 
@@ -98,7 +97,7 @@ async_thread = threading.Thread(target=run_asyncio_loop, daemon=True)
 async_thread.start()
 
 # Start the animation
-ani = FuncAnimation(fig, update, interval=50, blit=True)
+ani = FuncAnimation(fig, update, interval=50, blit=True, cache_frame_data=False)
 
 try:
     plt.show()
