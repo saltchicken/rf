@@ -5,7 +5,7 @@ import numpy as np
 import struct
 
 SAMPLE_RATE = 10e6
-FREQ = 100e6
+FREQ = 92e6
 BUFFER_SIZE = 4096  # samples per buffer
 PORT = 5000
 
