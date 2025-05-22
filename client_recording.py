@@ -45,7 +45,6 @@ async def receive_samples():
             buffer = np.concatenate((buffer, samples))
 
             if len(buffer) >= FFT_SIZE:
-                print("yes")
                 try:
                     sample_queue.put_nowait(buffer[:FFT_SIZE])
                 except asyncio.QueueFull:
@@ -65,19 +64,19 @@ async def receive_samples():
         stop_event.set()
 
 async def print_sample_lengths():
-    total_samples = np.array([], dtype=np.complex64)
+    total_samples = []
     while not stop_event.is_set():
         samples = await sample_queue.get()  # wait for next item
         print(f"Received buffer length: {len(samples)}")
-        total_samples = np.concatenate((total_samples, samples))
+        total_samples.append(samples)
         sample_queue.task_done()
 
         print(len(total_samples))
 
-        if len(total_samples) >= 10e6:
+        if len(total_samples) >= 2000:
             stop_event.set()
 
-    samples = total_samples
+    samples = np.concatenate(total_samples, axis=0)
     freq_offset = 3e5
     t = np.arange(len(samples)) / SAMPLE_RATE
     shifted_samples = samples * np.exp(-1j * 2 * np.pi * freq_offset * t)
