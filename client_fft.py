@@ -35,6 +35,12 @@ async def receive_samples():
     buffer = np.array([], dtype=np.complex64)
 
     try:
+        # Note: Read one frame before looping to "warm up" the reads
+        length_bytes = await reader.readexactly(4)
+        (length,) = struct.unpack('!I', length_bytes)
+
+        data = await reader.readexactly(length)
+
         while not stop_event.is_set():
             length_bytes = await reader.readexactly(4)
             (length,) = struct.unpack('!I', length_bytes)
@@ -50,10 +56,12 @@ async def receive_samples():
                     sample_queue.put_nowait(buffer[:FFT_SIZE])
                 except queue.Full:
                     print("Queue full. Dropping frame.")
-                    pass  # Drop frame if the queue is full
+                    pass
 
-                # buffer = buffer[FFT_SIZE:]
-                buffer = np.array([], dtype=np.complex64)
+                buffer = buffer[FFT_SIZE:]
+                if buffer.shape != (0,):
+                    print(f"Buffer shape error: {buffer.shape}")
+                # buffer = np.array([], dtype=np.complex64)
 
 
     except asyncio.IncompleteReadError:
