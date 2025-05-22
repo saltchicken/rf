@@ -13,9 +13,10 @@ plt.rcParams['toolbar'] = 'none'
 HOST = '127.0.0.1'
 PORT = 5000
 CHUNK_SIZE = 4096
-ACCUM_CHUNKS = 1
+ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
 SAMPLE_RATE = 10e6
+DECIMATION_FACTOR = 64
 
 sample_queue = queue.Queue(maxsize=10)
 stop_event = threading.Event()
@@ -40,6 +41,7 @@ async def receive_samples():
 
             data = await reader.readexactly(length)
             samples = complex_from_bytes(data)
+            # print(samples.shape)
 
             buffer = np.concatenate((buffer, samples))
 
@@ -47,9 +49,12 @@ async def receive_samples():
                 try:
                     sample_queue.put_nowait(buffer[:FFT_SIZE])
                 except queue.Full:
+                    print("Queue full. Dropping frame.")
                     pass  # Drop frame if the queue is full
 
-                buffer = buffer[FFT_SIZE:]
+                # buffer = buffer[FFT_SIZE:]
+                buffer = np.array([], dtype=np.complex64)
+
 
     except asyncio.IncompleteReadError:
         print("Server closed the connection.")
@@ -66,6 +71,7 @@ def update(frame):
         samples = sample_queue.get_nowait()
         fft_result = np.fft.fftshift(np.fft.fft(samples))
         magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
+        magnitude = magnitude[::DECIMATION_FACTOR]
         line.set_ydata(magnitude)
     return line,
 
@@ -73,8 +79,8 @@ def update(frame):
 fig, ax = plt.subplots(figsize=(10, 6))
 fig.canvas.mpl_connect('key_press_event', on_key)
 
-x = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, FFT_SIZE)
-line, = ax.plot(x, np.zeros(FFT_SIZE))
+x = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, FFT_SIZE // DECIMATION_FACTOR)
+line, = ax.plot(x, np.zeros(FFT_SIZE // DECIMATION_FACTOR))
 
 ax.set_xlim(-SAMPLE_RATE/2, SAMPLE_RATE/2)
 ax.set_ylim(-100, 100)
@@ -97,7 +103,7 @@ async_thread = threading.Thread(target=run_asyncio_loop, daemon=True)
 async_thread.start()
 
 # Start the animation
-ani = FuncAnimation(fig, update, interval=50, blit=True, cache_frame_data=False)
+ani = FuncAnimation(fig, update, interval=0, blit=True, cache_frame_data=False)
 
 try:
     plt.show()
