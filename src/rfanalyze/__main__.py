@@ -12,7 +12,7 @@ config_dir = f'{Path(__file__).parent}/config'
 def open_config_file():
     import os, sys
     try:
-        if sys.playform == 'darwin':
+        if sys.platform == 'darwin':
             os.system(f'open {config_dir}/config.ini')
         elif sys.platform == 'nt':
             os.startfile(f'{config_dir}/config.ini')
