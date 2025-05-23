@@ -38,7 +38,8 @@ async def stream_samples(writer, sdr, rxStream):
                 if sr.ret > 0:
                     samples = buff[:sr.ret].tobytes()
                     if len(samples) != BUFFER_SIZE * 8:
-                        print(f"Short read: {len(samples)} bytes")
+                        print(f"Short read: {len(samples)} bytes. Breaking")
+                        break
                     length_prefix = struct.pack('!I', len(samples))
                     try:
                         writer.write(length_prefix + samples)
