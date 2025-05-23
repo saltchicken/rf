@@ -2,8 +2,8 @@ import argparse
 import configparser
 import asyncio
 
-from client import ReaderListener, ReaderRecorder
-from fft import RealTimeFFTVisualizer
+from .client import ReaderListener, ReaderRecorder
+from .fft import RealTimeFFTVisualizer
 
 async def run():
     config = configparser.ConfigParser()
