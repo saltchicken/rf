@@ -18,8 +18,8 @@ def open_config_file():
             os.startfile(f'{config_dir}/config.ini')
         else:
             os.system(f'xdg-open {config_dir}/config.ini')
-    except:
-        print('Failed to open config file')
+    except Exception as e:
+        print('Failed to open config file: {e}')
 
 async def run():
     config = configparser.ConfigParser()
