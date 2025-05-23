@@ -10,14 +10,6 @@ from scipy.io.wavfile import write
 
 import pyaudio
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-HOST = config['Network']['HOST']  # e.g., '127.0.0.1'
-PORT = config['Network']['PORT']  # e.g., '5556'
-CHUNK_SIZE = 4096
-ACCUM_CHUNKS = 16
-FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
 
 def fm_demodulate(iq):
     angle = np.angle(iq[1:] * np.conj(iq[:-1]))
@@ -28,9 +20,12 @@ def complex_from_bytes(data):
     return samples[0::2] + 1j * samples[1::2]
 
 class Reader:
-    def __init__(self, sample_rate, freq_offset):
-        self.sample_rate = sample_rate
-        self.freq_offset = freq_offset
+    def __init__(self, args):
+        self.host = args.host
+        self.port = args.port
+        self.sample_rate = args.sample_rate
+        self.freq_offset = args.freq_offset
+        self.chunk_size = args.chunk_size
 
         self.stop_event = asyncio.Event()
         self.sample_queue = asyncio.Queue(maxsize=10)
@@ -39,7 +34,7 @@ class Reader:
 
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
-        socket.connect(f"tcp://{HOST}:{PORT}")
+        socket.connect(f"tcp://{self.host}:{self.port}")
         socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
 
         buffer = np.array([], dtype=np.complex64)
@@ -55,13 +50,13 @@ class Reader:
                 samples = complex_from_bytes(data)
                 buffer = np.concatenate((buffer, samples))
 
-                if len(buffer) >= FFT_SIZE:
+                if len(buffer) >= self.chunk_size:
                     try:
-                        self.sample_queue.put_nowait(buffer[:FFT_SIZE])
+                        self.sample_queue.put_nowait(buffer[:self.chunk_size])
                     except asyncio.QueueFull:
                         print("Queue full. Dropping frame.")
 
-                    buffer = buffer[FFT_SIZE:]
+                    buffer = buffer[self.chunk_size:]
                     if buffer.shape != (0,):
                         print(f"Buffer shape error: {buffer.shape}")
 
@@ -161,13 +156,19 @@ class Reader:
             self.stop_event.set()
 
 async def main():
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+
     parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
-    parser.add_argument('--freq_offset', type=float, default=3e5,
-                        help='Frequency offset for signal shifting (in Hz). Default is 300000.')
+    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
+    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
+    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
+    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
+    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
+
     args = parser.parse_args()
 
-    sample_rate = float(config['Processing']['SAMPLE_RATE'])
-    reader = Reader(sample_rate, args.freq_offset)
+    reader = Reader(args)
     consumer_task = asyncio.create_task(reader.record_sample())
     producer_task = asyncio.create_task(reader.receive_samples())
     await asyncio.gather(producer_task, consumer_task)
