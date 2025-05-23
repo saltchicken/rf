@@ -41,13 +41,12 @@ class Reader:
 
         try:
             while not self.stop_event.is_set():
-                topic, length, samples = await socket.recv_multipart()  # Receives one full message
+                topic, length, sample_bytes = await socket.recv_multipart()  # Receives one full message
                 length = struct.unpack('!I', length)[0]
-                data = samples
-                if len(data) % 8 != 0:
-                    print(f"Received invalid buffer of length {len(data)}")
+                if len(sample_bytes) % 8 != 0:
+                    print(f"Received invalid buffer of length {len(sample_bytes)}")
                     continue
-                samples = complex_from_bytes(data)
+                samples = complex_from_bytes(sample_bytes)
                 buffer = np.concatenate((buffer, samples))
 
                 if len(buffer) >= self.chunk_size:
@@ -72,7 +71,7 @@ class Reader:
         samples_recorded = 0
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
-            print(f"Received buffer length: {len(samples)}")
+            # print(f"Received buffer length: {len(samples)}")
             samples_recorded += len(samples)
             total_samples.append(samples)
             self.sample_queue.task_done()

@@ -74,14 +74,14 @@ class Receiver:
                     buff = np.empty(self.buffer_size, np.complex64)
                     sr = await loop.run_in_executor(None, self.sdr.readStream, self.rxStream, [buff], self.buffer_size)
                     if sr.ret > 0:
-                        samples = buff[:sr.ret].tobytes()
-                        if len(samples) != self.buffer_size * 8:
-                            print(f"Short read: {len(samples)} bytes. Breaking")
+                        sample_bytes = buff[:sr.ret].tobytes()
+                        if len(sample_bytes) != self.buffer_size * 8:
+                            print(f"Short read: {len(sample_bytes)} bytes. Breaking")
                             break
                         # Send topic + message
                         topic = b"samples"
-                        length = struct.pack('!I', len(samples))
-                        await self.pub_socket.send_multipart([topic, length, samples])
+                        length = struct.pack('!I', len(sample_bytes))
+                        await self.pub_socket.send_multipart([topic, length, sample_bytes])
                     else:
                         await asyncio.sleep(0.01)
                 except Exception as e:
