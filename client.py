@@ -46,9 +46,9 @@ class Reader:
 
         try:
             while not self.stop_event.is_set():
-                topic, msg = await socket.recv_multipart()  # Receives one full message
-                length = struct.unpack('!I', msg[:4])[0]
-                data = msg[4:]
+                topic, length, samples = await socket.recv_multipart()  # Receives one full message
+                length = struct.unpack('!I', length)[0]
+                data = samples
                 if len(data) % 8 != 0:
                     print(f"Received invalid buffer of length {len(data)}")
                     continue
@@ -168,7 +168,7 @@ async def main():
 
     sample_rate = float(config['Processing']['SAMPLE_RATE'])
     reader = Reader(sample_rate, args.freq_offset)
-    consumer_task = asyncio.create_task(reader.listen_sample())
+    consumer_task = asyncio.create_task(reader.record_sample())
     producer_task = asyncio.create_task(reader.receive_samples())
     await asyncio.gather(producer_task, consumer_task)
 

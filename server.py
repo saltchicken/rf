@@ -12,7 +12,7 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
-FREQ = 106e6
+FREQ = 92e6
 BUFFER_SIZE = 4096  # samples per buffer
 ZMQ_PORT = config['Network']['PORT']
 
@@ -51,8 +51,8 @@ async def stream_samples(pub_socket, sdr, rxStream):
                         break
                     # Send topic + message
                     topic = b"samples"
-                    length_prefix = struct.pack('!I', len(samples))
-                    await pub_socket.send_multipart([topic, length_prefix + samples])
+                    length = struct.pack('!I', len(samples))
+                    await pub_socket.send_multipart([topic, length, samples])
                 else:
                     await asyncio.sleep(0.01)
             except Exception as e:
