@@ -11,7 +11,7 @@ import signal
 import zmq
 import zmq.asyncio
 
-from client import Reader
+from .client import Reader
 
 plt.style.use('dark.mplstyle')
 
