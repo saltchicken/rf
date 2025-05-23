@@ -11,14 +11,14 @@ import zmq
 import zmq.asyncio
 
 plt.style.use('dark.mplstyle')
-plt.rcParams['toolbar'] = 'none'
+# plt.rcParams['toolbar'] = 'none'
 
-HOST = '127.0.0.1'
+HOST = '10.0.0.9'
 PORT = 5000
 CHUNK_SIZE = 4096
 ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = 10e6
+SAMPLE_RATE = 2e6
 DECIMATION_FACTOR = 64
 
 sample_queue = queue.Queue(maxsize=10)
@@ -101,7 +101,7 @@ ax.grid(True, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
 
 
 # Add tick labels at the min and max frequency
-xticks = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, 9)  # 9 points from -1 MHz to 1 MHz
+xticks = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, 19)  # 9 points from -1 MHz to 1 MHz
 xtick_labels = [f'{x/1e6:.1f} MHz' for x in xticks]
 # xticks = [-SAMPLE_RATE/2, 0, SAMPLE_RATE/2]
 # xtick_labels = [f'{-SAMPLE_RATE/2/1e6:.1f} MHz', '0 Hz', f'{SAMPLE_RATE/2/1e6:.1f} MHz']

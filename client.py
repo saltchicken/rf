@@ -8,6 +8,8 @@ import zmq.asyncio
 from scipy.signal import decimate, firwin, lfilter
 from scipy.io.wavfile import write
 
+import pyaudio
+
 config = configparser.ConfigParser()
 config.read('config.ini')
 
@@ -79,7 +81,7 @@ class Reader:
             self.sample_queue.task_done()
             print(len(total_samples))
 
-            if len(total_samples) >= 100:
+            if len(total_samples) >= 1000:
                 self.stop_event.set()
 
         samples = np.concatenate(total_samples, axis=0)
@@ -105,6 +107,54 @@ class Reader:
         write("output.wav", 48000, audio_int16)
         print("Saved FM audio to output.wav")
 
+    async def listen_sample(self):
+        # PyAudio setup
+        p = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=1,
+                        rate=48000,
+                        output=True,
+                        frames_per_buffer=4096)
+
+        try:
+            while not self.stop_event.is_set():
+                samples = await self.sample_queue.get()
+                self.sample_queue.task_done()
+
+                # Frequency shift
+                t = np.arange(len(samples)) / self.sample_rate
+                shifted_samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
+
+                # FIR low-pass filter
+                cutoff_hz = 100e3
+                nyquist_rate = self.sample_rate / 2
+                num_taps = 101
+                fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
+
+                filtered_samples = lfilter(fir_coeff, 1.0, shifted_samples)
+
+                # FM demodulation
+                fm_demod = fm_demodulate(filtered_samples)
+
+                # Decimate to ~48kHz
+                decimation_factor = int(self.sample_rate / 48000)
+                audio = decimate(fm_demod, decimation_factor)
+
+                # Normalize and convert to int16
+                audio /= np.max(np.abs(audio) + 1e-9)  # prevent division by zero
+                audio_int16 = np.int16(audio * 32767)
+
+                # Stream to audio output
+                stream.write(audio_int16.tobytes())
+        except asyncio.CancelledError:
+            print("Cancelled record_sample.")
+        finally:
+            print("Shutting down audio playback.")
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            self.stop_event.set()
+
 async def main():
     parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
     parser.add_argument('--freq_offset', type=float, default=3e5,
@@ -113,7 +163,7 @@ async def main():
 
     sample_rate = float(config['Processing']['SAMPLE_RATE'])
     reader = Reader(sample_rate, args.freq_offset)
-    consumer_task = asyncio.create_task(reader.record_sample())
+    consumer_task = asyncio.create_task(reader.listen_sample())
     producer_task = asyncio.create_task(reader.receive_samples())
     await asyncio.gather(producer_task, consumer_task)
 

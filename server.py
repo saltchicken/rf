@@ -29,7 +29,9 @@ def setup_sdr():
     sdr = SoapySDR.Device(args)
     sdr.setSampleRate(SOAPY_SDR_RX, 0, SAMPLE_RATE)
     sdr.setFrequency(SOAPY_SDR_RX, 0, FREQ)
-    sdr.setGain(SOAPY_SDR_RX, 0, 30)
+    gain_range = sdr.getGainRange(SOAPY_SDR_RX, 0)
+    print(gain_range)
+    sdr.setGain(SOAPY_SDR_RX, 0, 60)
     return sdr
 
 async def stream_samples(pub_socket, sdr, rxStream):
