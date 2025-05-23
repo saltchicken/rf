@@ -1,3 +1,4 @@
+import argparse
 import configparser
 import asyncio
 import struct
@@ -15,12 +16,6 @@ PORT = config['Network']['PORT']  # e.g., '5556'
 CHUNK_SIZE = 4096
 ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
-
-stop_event = asyncio.Event()
-sample_queue = asyncio.Queue(maxsize=10)
-
-ctx = zmq.asyncio.Context()
 
 def fm_demodulate(iq):
     angle = np.angle(iq[1:] * np.conj(iq[:-1]))
@@ -30,79 +25,96 @@ def complex_from_bytes(data):
     samples = np.frombuffer(data, dtype=np.float32)
     return samples[0::2] + 1j * samples[1::2]
 
-async def receive_samples():
-    socket = ctx.socket(zmq.SUB)
-    socket.connect(f"tcp://{HOST}:{PORT}")
-    socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
+class Reader:
+    def __init__(self, sample_rate, freq_offset):
+        self.sample_rate = sample_rate
+        self.freq_offset = freq_offset
 
-    buffer = np.array([], dtype=np.complex64)
+        self.stop_event = asyncio.Event()
+        self.sample_queue = asyncio.Queue(maxsize=10)
 
-    try:
-        while not stop_event.is_set():
-            topic, msg = await socket.recv_multipart()  # Receives one full message
-            length = struct.unpack('!I', msg[:4])[0]
-            data = msg[4:]
-            if len(data) % 8 != 0:
-                print(f"Received invalid buffer of length {len(data)}")
-                continue
-            samples = complex_from_bytes(data)
-            buffer = np.concatenate((buffer, samples))
+        self.ctx = zmq.asyncio.Context()
 
-            if len(buffer) >= FFT_SIZE:
-                try:
-                    sample_queue.put_nowait(buffer[:FFT_SIZE])
-                except asyncio.QueueFull:
-                    print("Queue full. Dropping frame.")
+    async def receive_samples(self):
+        socket = self.ctx.socket(zmq.SUB)
+        socket.connect(f"tcp://{HOST}:{PORT}")
+        socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
 
-                buffer = buffer[FFT_SIZE:]
-                if buffer.shape != (0,):
-                    print(f"Buffer shape error: {buffer.shape}")
+        buffer = np.array([], dtype=np.complex64)
 
-    except asyncio.CancelledError:
-        print("Cancelled receive_samples.")
-    finally:
-        print("Receiver shutting down.")
-        stop_event.set()
-        socket.close()
+        try:
+            while not self.stop_event.is_set():
+                topic, msg = await socket.recv_multipart()  # Receives one full message
+                length = struct.unpack('!I', msg[:4])[0]
+                data = msg[4:]
+                if len(data) % 8 != 0:
+                    print(f"Received invalid buffer of length {len(data)}")
+                    continue
+                samples = complex_from_bytes(data)
+                buffer = np.concatenate((buffer, samples))
 
-async def print_sample_lengths():
-    total_samples = []
-    while not stop_event.is_set():
-        samples = await sample_queue.get()
-        print(f"Received buffer length: {len(samples)}")
-        total_samples.append(samples)
-        sample_queue.task_done()
-        print(len(total_samples))
+                if len(buffer) >= FFT_SIZE:
+                    try:
+                        self.sample_queue.put_nowait(buffer[:FFT_SIZE])
+                    except asyncio.QueueFull:
+                        print("Queue full. Dropping frame.")
 
-        if len(total_samples) >= 500:
-            stop_event.set()
+                    buffer = buffer[FFT_SIZE:]
+                    if buffer.shape != (0,):
+                        print(f"Buffer shape error: {buffer.shape}")
 
-    samples = np.concatenate(total_samples, axis=0)
-    freq_offset = 3e5
-    t = np.arange(len(samples)) / SAMPLE_RATE
-    shifted_samples = samples * np.exp(-1j * 2 * np.pi * freq_offset * t)
+        except asyncio.CancelledError:
+            print("Cancelled receive_samples.")
+        finally:
+            print("Receiver shutting down.")
+            self.stop_event.set()
+            socket.close()
 
-    # Design low-pass FIR filter (cutoff ~100 kHz)
-    cutoff_hz = 100e3
-    nyquist_rate = SAMPLE_RATE / 2
-    num_taps = 101
-    fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
+    async def record_sample(self):
+        total_samples = []
+        while not self.stop_event.is_set():
+            samples = await self.sample_queue.get()
+            print(f"Received buffer length: {len(samples)}")
+            total_samples.append(samples)
+            self.sample_queue.task_done()
+            print(len(total_samples))
 
-    filtered_samples = lfilter(fir_coeff, 1.0, shifted_samples)
-    fm_demod = fm_demodulate(filtered_samples)
+            if len(total_samples) >= 100:
+                self.stop_event.set()
 
-    decimation_factor = int(SAMPLE_RATE / 48000)
-    audio = decimate(fm_demod, decimation_factor)
+        samples = np.concatenate(total_samples, axis=0)
+        # freq_offset = 3e5
+        t = np.arange(len(samples)) / self.sample_rate
+        shifted_samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
 
-    audio /= np.max(np.abs(audio))
-    audio_int16 = np.int16(audio * 32767)
+        # Design low-pass FIR filter (cutoff ~100 kHz)
+        cutoff_hz = 100e3
+        nyquist_rate = self.sample_rate / 2
+        num_taps = 101
+        fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
 
-    write("output.wav", 48000, audio_int16)
-    print("Saved FM audio to output.wav")
+        filtered_samples = lfilter(fir_coeff, 1.0, shifted_samples)
+        fm_demod = fm_demodulate(filtered_samples)
+
+        decimation_factor = int(self.sample_rate / 48000)
+        audio = decimate(fm_demod, decimation_factor)
+
+        audio /= np.max(np.abs(audio))
+        audio_int16 = np.int16(audio * 32767)
+
+        write("output.wav", 48000, audio_int16)
+        print("Saved FM audio to output.wav")
 
 async def main():
-    consumer_task = asyncio.create_task(print_sample_lengths())
-    producer_task = asyncio.create_task(receive_samples())
+    parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
+    parser.add_argument('--freq_offset', type=float, default=3e5,
+                        help='Frequency offset for signal shifting (in Hz). Default is 300000.')
+    args = parser.parse_args()
+
+    sample_rate = float(config['Processing']['SAMPLE_RATE'])
+    reader = Reader(sample_rate, args.freq_offset)
+    consumer_task = asyncio.create_task(reader.record_sample())
+    producer_task = asyncio.create_task(reader.receive_samples())
     await asyncio.gather(producer_task, consumer_task)
 
 if __name__ == '__main__':
