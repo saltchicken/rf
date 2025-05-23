@@ -13,6 +13,7 @@ class Receiver:
         self.sample_rate = args.sample_rate
         self.center_freq = args.center_freq
         self.buffer_size = args.buffer_size
+        self.gain = args.gain
 
         self.sdr = None
         self.rxStream = None
@@ -43,7 +44,7 @@ class Receiver:
         self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
         # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
         # print(gain_range)
-        self.sdr.setGain(SOAPY_SDR_RX, 0, 60)
+        self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
 
     def close(self):
             print("Receiver cleanup started.")
@@ -102,6 +103,7 @@ async def main():
     parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.',)
     parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.',)
     parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.',)
+    parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.',)
 
     args = parser.parse_args()
 
