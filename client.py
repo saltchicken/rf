@@ -5,7 +5,7 @@ import struct
 import numpy as np
 import zmq
 import zmq.asyncio
-from scipy.signal import decimate, firwin, lfilter
+from scipy.signal import decimate, firwin, lfilter, resample_poly
 from scipy.io.wavfile import write
 
 import pyaudio
@@ -27,6 +27,40 @@ def complex_from_bytes(data):
     samples = np.frombuffer(data, dtype=np.float32)
     return samples[0::2] + 1j * samples[1::2]
 
+class RingBuffer:
+    def __init__(self, size, dtype=np.complex64):
+        self.size = size
+        self.buffer = np.zeros(size, dtype=dtype)
+        self.write_ptr = 0
+        self.read_ptr = 0
+        self.filled = 0
+
+    def append(self, data):
+        data_len = len(data)
+        if data_len > self.size:
+            data = data[-self.size:]  # only keep last `size` elements
+            data_len = self.size
+
+        for i in range(data_len):
+            self.buffer[self.write_ptr] = data[i]
+            self.write_ptr = (self.write_ptr + 1) % self.size
+            if self.filled < self.size:
+                self.filled += 1
+            else:
+                self.read_ptr = (self.read_ptr + 1) % self.size
+
+    def read(self, n):
+        if self.filled < n:
+            return None
+        idx = (self.read_ptr + np.arange(n)) % self.size
+        result = self.buffer[idx].copy()
+        self.read_ptr = (self.read_ptr + n) % self.size
+        self.filled -= n
+        return result
+
+    def available(self):
+        return self.filled
+
 class Reader:
     def __init__(self, sample_rate, freq_offset):
         self.sample_rate = sample_rate
@@ -40,31 +74,29 @@ class Reader:
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
         socket.connect(f"tcp://{HOST}:{PORT}")
-        socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
+        socket.setsockopt_string(zmq.SUBSCRIBE, '')
 
-        buffer = np.array([], dtype=np.complex64)
+        ring = RingBuffer(size=FFT_SIZE * 4)
 
         try:
             while not self.stop_event.is_set():
-                topic, msg = await socket.recv_multipart()  # Receives one full message
+                topic, msg = await socket.recv_multipart()
                 length = struct.unpack('!I', msg[:4])[0]
                 data = msg[4:]
+
                 if len(data) % 8 != 0:
                     print(f"Received invalid buffer of length {len(data)}")
                     continue
-                samples = complex_from_bytes(data)
-                buffer = np.concatenate((buffer, samples))
 
-                if len(buffer) >= FFT_SIZE:
+                samples = complex_from_bytes(data)
+                ring.append(samples)
+
+                while ring.available() >= FFT_SIZE:
+                    chunk = ring.read(FFT_SIZE)
                     try:
-                        self.sample_queue.put_nowait(buffer[:FFT_SIZE])
+                        self.sample_queue.put_nowait(chunk)
                     except asyncio.QueueFull:
                         print("Queue full. Dropping frame.")
-
-                    buffer = buffer[FFT_SIZE:]
-                    if buffer.shape != (0,):
-                        print(f"Buffer shape error: {buffer.shape}")
-
         except asyncio.CancelledError:
             print("Cancelled receive_samples.")
         finally:
@@ -72,16 +104,17 @@ class Reader:
             self.stop_event.set()
             socket.close()
 
-    async def record_sample(self):
+    async def record_sample(self, duration_seconds=1):
         total_samples = []
+        samples_recorded = 0
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
             print(f"Received buffer length: {len(samples)}")
+            samples_recorded += len(samples)
             total_samples.append(samples)
             self.sample_queue.task_done()
-            print(len(total_samples))
 
-            if len(total_samples) >= 1000:
+            if samples_recorded >= self.sample_rate * duration_seconds:
                 self.stop_event.set()
 
         samples = np.concatenate(total_samples, axis=0)
@@ -99,7 +132,7 @@ class Reader:
         fm_demod = fm_demodulate(filtered_samples)
 
         decimation_factor = int(self.sample_rate / 48000)
-        audio = decimate(fm_demod, decimation_factor)
+        audio = resample_poly(fm_demod, up=1, down=decimation_factor)
 
         audio /= np.max(np.abs(audio))
         audio_int16 = np.int16(audio * 32767)
@@ -139,7 +172,7 @@ class Reader:
 
                 # Decimate to ~48kHz
                 decimation_factor = int(self.sample_rate / 48000)
-                audio = decimate(fm_demod, decimation_factor)
+                audio = resample_poly(fm_demod, up=1, down=decimation_factor)
 
                 # Normalize and convert to int16
                 audio /= np.max(np.abs(audio) + 1e-9)  # prevent division by zero
@@ -167,7 +200,7 @@ async def main():
 
     sample_rate = float(config['Processing']['SAMPLE_RATE'])
     reader = Reader(sample_rate, args.freq_offset)
-    consumer_task = asyncio.create_task(reader.listen_sample())
+    consumer_task = asyncio.create_task(reader.record_sample())
     producer_task = asyncio.create_task(reader.receive_samples())
     await asyncio.gather(producer_task, consumer_task)
 
