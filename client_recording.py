@@ -73,7 +73,7 @@ async def print_sample_lengths():
 
         print(len(total_samples))
 
-        if len(total_samples) >= 2000:
+        if len(total_samples) >= 500:
             stop_event.set()
 
     samples = np.concatenate(total_samples, axis=0)
