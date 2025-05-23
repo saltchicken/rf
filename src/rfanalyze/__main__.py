@@ -21,7 +21,7 @@ def open_config_file():
     except Exception as e:
         print(f'Failed to open config file: {e}')
 
-def get_args(virtual=False):
+def get_args(command=None):
     config = configparser.ConfigParser()
     config.read(f'{config_dir}/config.ini')
 
@@ -56,7 +56,7 @@ def get_args(virtual=False):
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
     if virtual:
-        return parser.parse_args(['test'])
+        return parser.parse_args([command])
     else:
         return parser.parse_args()
 
