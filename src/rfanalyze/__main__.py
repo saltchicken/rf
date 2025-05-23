@@ -41,7 +41,7 @@ def get_args():
 
     # Subparser: record
     record_parser = subparsers.add_parser('record', parents=[parent_parser], help='Record FM to file')
-    record_parser.add_argument('--duration', type=int, default=config['Recording']['DURATION'], help='Recording duration in seconds')
+    record_parser.add_argument('--duration', type=int, default=config['Processing']['DURATION'], help='Recording duration in seconds')
 
     fft_parser = subparsers.add_parser('fft', parents=[parent_parser], help='Real-time FFT visualization')
     fft_parser.add_argument('--chunks_per_frame', type=int, default=config['FFT']['CHUNKS_PER_FRAME'], help='Chunks to accumalate per FFT calculation')
