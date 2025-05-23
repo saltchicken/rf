@@ -1,4 +1,4 @@
-import configparser
+import argparse, configparser
 import asyncio
 import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_ constants
@@ -7,84 +7,96 @@ import struct
 import zmq
 import zmq.asyncio
 
-# Load config
-config = configparser.ConfigParser()
-config.read('config.ini')
+class Receiver:
+    def __init__(self, args):
+        self.port = args.port
+        self.sample_rate = args.sample_rate
+        self.center_freq = args.center_freq
+        self.buffer_size = args.buffer_size
 
-SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
-FREQ = 92e6
-BUFFER_SIZE = 4096  # samples per buffer
-ZMQ_PORT = config['Network']['PORT']
+        self.sdr = None
+        # self.setup_sdr(args.driver)
+        self.setup_sdr()
 
-# Global SDR variables
-sdr = None
-rxStream = None
+        self.ctx = zmq.asyncio.Context()
+        self.pub_socket = self.ctx.socket(zmq.PUB)
+        self.pub_socket.bind(f"tcp://0.0.0.0:{self.port}")
+        print(f"ZeroMQ PUB server broadcasting on port {self.port}")
 
-def setup_sdr():
-    results = SoapySDR.Device.enumerate()
-    if not results:
-        raise RuntimeError("No SDR devices found.")
-    
-    args = results[0]
-    sdr = SoapySDR.Device(args)
-    # sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW")
-    sdr.setSampleRate(SOAPY_SDR_RX, 0, SAMPLE_RATE)
-    sdr.setFrequency(SOAPY_SDR_RX, 0, FREQ)
-    gain_range = sdr.getGainRange(SOAPY_SDR_RX, 0)
-    print(gain_range)
-    sdr.setGain(SOAPY_SDR_RX, 0, 60)
-    return sdr
+    def setup_sdr(self, driver=None):
+        if driver:
+            args = SoapySDR.SoapySDRKwargs()
+            args["driver"] = driver
+        else:
+            results = SoapySDR.Device.enumerate()
+            if not results:
+                raise RuntimeError("No SDR devices found.")
 
-async def stream_samples(pub_socket, sdr, rxStream):
-    rxStream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-    sdr.activateStream(rxStream)
-    loop = asyncio.get_running_loop()
+            args = results[0]
+        self.sdr = SoapySDR.Device(args)
 
-    try:
-        while True:
-            try:
-                buff = np.empty(BUFFER_SIZE, np.complex64)
-                sr = await loop.run_in_executor(None, sdr.readStream, rxStream, [buff], BUFFER_SIZE)
-                if sr.ret > 0:
-                    samples = buff[:sr.ret].tobytes()
-                    if len(samples) != BUFFER_SIZE * 8:
-                        print(f"Short read: {len(samples)} bytes. Breaking")
-                        break
-                    # Send topic + message
-                    topic = b"samples"
-                    length = struct.pack('!I', len(samples))
-                    await pub_socket.send_multipart([topic, length, samples])
-                else:
-                    await asyncio.sleep(0.01)
-            except Exception as e:
-                print(f"Error during stream processing: {e}")
-                brea
-    except asyncio.CancelledError:
-        pass
-    finally:
-        print("Closing SDR stream.")
+        # sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW")
+        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+        self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+        # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
+        # print(gain_range)
+        self.sdr.setGain(SOAPY_SDR_RX, 0, 60)
+
+    async def stream_samples(self):
+        rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        self.sdr.activateStream(rxStream)
+        loop = asyncio.get_running_loop()
+
         try:
-            sdr.deactivateStream(rxStream)
-            sdr.closeStream(rxStream)
-        except Exception as e:
-            print(f"Error deactivating/closing SDR stream: {e}")
+            while True:
+                try:
+                    buff = np.empty(self.buffer_size, np.complex64)
+                    sr = await loop.run_in_executor(None, self.sdr.readStream, rxStream, [buff], self.buffer_size)
+                    if sr.ret > 0:
+                        samples = buff[:sr.ret].tobytes()
+                        if len(samples) != self.buffer_size * 8:
+                            print(f"Short read: {len(samples)} bytes. Breaking")
+                            break
+                        # Send topic + message
+                        topic = b"samples"
+                        length = struct.pack('!I', len(samples))
+                        await self.pub_socket.send_multipart([topic, length, samples])
+                    else:
+                        await asyncio.sleep(0.01)
+                except Exception as e:
+                    print(f"Error during stream processing: {e}")
+                    brea
+        except asyncio.CancelledError:
+            pass
+        finally:
+            print("Closing SDR stream.")
+            try:
+                self.sdr.deactivateStream(rxStream)
+                self.sdr.closeStream(rxStream)
+            except Exception as e:
+                print(f"Error deactivating/closing SDR stream: {e}")
 
 async def main():
-    global sdr
-    sdr = setup_sdr()
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-    context = zmq.asyncio.Context()
-    pub_socket = context.socket(zmq.PUB)
-    pub_socket.bind(f"tcp://0.0.0.0:{ZMQ_PORT}")
-    print(f"ZeroMQ PUB server broadcasting on port {ZMQ_PORT}")
+    parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
+    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.',)
+    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.',)
+    parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.',)
+    parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.',)
+
+    args = parser.parse_args()
+
+    receiver = Receiver(args)
 
     try:
-        await stream_samples(pub_socket, sdr, rxStream)
+        await receiver.stream_samples()
     except KeyboardInterrupt:
         print("Server shutdown requested (Ctrl+C)")
     finally:
-        pub_socket.close()
-        context.term()
+        receiver.pub_socket.close()
+        receiver.ctx.term()
         print("ZeroMQ resources released")
 
 if __name__ == '__main__':
