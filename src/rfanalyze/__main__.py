@@ -55,7 +55,7 @@ def get_args(command=None):
     edit_parser = subparsers.add_parser('edit', help='Edit config file')
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
-    if virtual:
+    if command:
         return parser.parse_args([command])
     else:
         return parser.parse_args()
