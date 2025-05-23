@@ -16,3 +16,8 @@ rfanalyze = "rfanalyze.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+rfanalyze = ["config/*"]
+
+[tool.setuptools]
+include-package-data = true
