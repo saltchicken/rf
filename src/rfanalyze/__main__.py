@@ -5,7 +5,7 @@ import asyncio
 from client import ReaderListener, ReaderRecorder
 from fft import RealTimeFFTVisualizer
 
-async def main():
+async def run():
     config = configparser.ConfigParser()
     config.read('config.ini')
 
@@ -49,7 +49,8 @@ async def main():
     else:
         raise ValueError(f"Unknown command: {args.command}")
 
+def main():
+    asyncio.run(run())
 
 if __name__ == '__main__':
-    asyncio.run(main())
-
+    main()
