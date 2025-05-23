@@ -13,12 +13,12 @@ import zmq.asyncio
 plt.style.use('dark.mplstyle')
 # plt.rcParams['toolbar'] = 'none'
 
-HOST = '10.0.0.9'
+HOST = '10.0.0.5'
 PORT = 5000
 CHUNK_SIZE = 4096
 ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = 2e6
+SAMPLE_RATE = 10e6
 DECIMATION_FACTOR = 64
 
 sample_queue = queue.Queue(maxsize=10)
@@ -43,9 +43,9 @@ async def receive_samples():
 
     try:
         while not stop_event.is_set():
-            topic, msg = await socket.recv_multipart()  # Receives one full message
-            length = struct.unpack('!I', msg[:4])[0]
-            data = msg[4:]
+            topic, length, samples = await socket.recv_multipart()  # Receives one full message
+            length = struct.unpack('!I', length)[0]
+            data = samples
             if len(data) % 8 != 0:
                 print(f"Received invalid buffer of length {len(data)}")
                 continue
