@@ -28,6 +28,8 @@ async def main():
     record_parser.add_argument('--duration', type=int, default=1, help='Recording duration in seconds')
 
     fft_parser = subparsers.add_parser('fft', parents=[parent_parser], help='Real-time FFT visualization')
+    fft_parser.add_argument('--chunks_per_frame', type=int, default=config['FFT']['CHUNKS_PER_FRAME'], help='Chunks to accumalate per FFT calculation')
+    fft_parser.add_argument('--decimation_factor', type=int, default=config['FFT']['DECIMATION_FACTOR'], help='Decimation factor for FFT calculation')
 
     args = parser.parse_args()
 

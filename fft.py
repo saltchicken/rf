@@ -19,14 +19,14 @@ plt.style.use('dark.mplstyle')
 class RealTimeFFTVisualizer(Reader):
     def __init__(self, args):
         super().__init__(args)
-        self.chunk_size = 65536
-        self.DECIMATION_FACTOR = 64
+        self.chunk_size = self.chunk_size * args.chunks_per_frame
+        self.decimation_factor = args.decimation_factor
 
         self.fig, self.ax = plt.subplots(figsize=(10, 6))
         self.fig.canvas.mpl_connect('key_press_event', self.on_key)
 
-        x = np.linspace(-self.sample_rate / 2, self.sample_rate / 2, self.chunk_size // self.DECIMATION_FACTOR)
-        self.line, = self.ax.plot(x, np.zeros(self.chunk_size // self.DECIMATION_FACTOR))
+        x = np.linspace(-self.sample_rate / 2, self.sample_rate / 2, self.chunk_size // self.decimation_factor)
+        self.line, = self.ax.plot(x, np.zeros(self.chunk_size // self.decimation_factor))
 
         self.ax.set_xlim(-self.sample_rate / 2, self.sample_rate / 2)
         self.ax.set_ylim(-100, 100)
@@ -57,7 +57,7 @@ class RealTimeFFTVisualizer(Reader):
             samples = self.sample_queue.get_nowait()
             fft_result = np.fft.fftshift(np.fft.fft(samples))
             magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
-            magnitude = magnitude[::self.DECIMATION_FACTOR]
+            magnitude = magnitude[::self.decimation_factor]
             self.line.set_ydata(magnitude)
         return self.line,
 
