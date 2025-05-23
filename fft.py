@@ -71,20 +71,3 @@ class RealTimeFFTVisualizer(Reader):
         finally:
             self.stop_event.set()
             async_thread.join()
-
-
-if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read('config.ini')
-
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
-    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
-    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
-    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
-    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
-
-    args = parser.parse_args()
-
-    visualizer = RealTimeFFTVisualizer(args)
-    visualizer.run()

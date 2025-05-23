@@ -1,0 +1,53 @@
+import argparse
+import configparser
+import asyncio
+
+from client import ReaderListener, ReaderRecorder
+from fft import RealTimeFFTVisualizer
+
+async def main():
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
+    parent_parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
+    parent_parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
+    parent_parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
+    parent_parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
+
+    # Main parser
+    parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    # Subparser: listen
+    listen_parser = subparsers.add_parser('listen', parents=[parent_parser], help='Listen to FM broadcast')
+
+    # Subparser: record
+    record_parser = subparsers.add_parser('record', parents=[parent_parser], help='Record FM to file')
+    record_parser.add_argument('--duration', type=int, default=1, help='Recording duration in seconds')
+
+    fft_parser = subparsers.add_parser('fft', parents=[parent_parser], help='Real-time FFT visualization')
+
+    args = parser.parse_args()
+
+    if args.command == 'record':
+        reader_recorder = ReaderRecorder(args)
+        receive_task = asyncio.create_task(reader_recorder.receive_samples())
+        record_task = asyncio.create_task(reader_recorder.record_sample(duration_seconds = args.duration))
+        await asyncio.gather(record_task, receive_task)
+    elif args.command == 'listen':
+        reader_listener = ReaderListener(args)
+        receive_task = asyncio.create_task(reader_listener.receive_samples())
+        listen_task = asyncio.create_task(reader_listener.listen_sample())
+        await asyncio.gather(listen_task, receive_task)
+    elif args.command == 'fft':
+        fft_visualizer = RealTimeFFTVisualizer(args)
+        fft_visualizer.run()
+    else:
+        raise ValueError(f"Unknown command: {args.command}")
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+
