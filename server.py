@@ -15,8 +15,11 @@ class Receiver:
         self.buffer_size = args.buffer_size
 
         self.sdr = None
+        self.rxStream = None
         # self.setup_sdr(args.driver)
         self.setup_sdr()
+
+        self.stop_event = asyncio.Event()
 
         self.ctx = zmq.asyncio.Context()
         self.pub_socket = self.ctx.socket(zmq.PUB)
@@ -42,16 +45,33 @@ class Receiver:
         # print(gain_range)
         self.sdr.setGain(SOAPY_SDR_RX, 0, 60)
 
+    def close(self):
+            print("Receiver cleanup started.")
+            try:
+                if self.sdr:
+                    try:
+                        if self.rxStream is not None:
+                            self.sdr.deactivateStream(self.rxStream)
+                            self.sdr.closeStream(self.rxStream)
+                            self.rxStream = None
+                    except Exception as e:
+                        print(f"Error closing SDR stream: {e}")
+            finally:
+                self.sdr = None
+                self.pub_socket.close(linger=0)
+                self.ctx.term()
+                print("Receiver cleanup finished.")
+
     async def stream_samples(self):
-        rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-        self.sdr.activateStream(rxStream)
+        self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        self.sdr.activateStream(self.rxStream)
         loop = asyncio.get_running_loop()
 
         try:
-            while True:
+            while not self.stop_event.is_set():
                 try:
                     buff = np.empty(self.buffer_size, np.complex64)
-                    sr = await loop.run_in_executor(None, self.sdr.readStream, rxStream, [buff], self.buffer_size)
+                    sr = await loop.run_in_executor(None, self.sdr.readStream, self.rxStream, [buff], self.buffer_size)
                     if sr.ret > 0:
                         samples = buff[:sr.ret].tobytes()
                         if len(samples) != self.buffer_size * 8:
@@ -65,16 +85,13 @@ class Receiver:
                         await asyncio.sleep(0.01)
                 except Exception as e:
                     print(f"Error during stream processing: {e}")
-                    brea
+
         except asyncio.CancelledError:
-            pass
+            print("Server shutdown requested (Ctrl+C)")
+            self.stop_event.set()
         finally:
-            print("Closing SDR stream.")
-            try:
-                self.sdr.deactivateStream(rxStream)
-                self.sdr.closeStream(rxStream)
-            except Exception as e:
-                print(f"Error deactivating/closing SDR stream: {e}")
+            await asyncio.sleep(1)
+            self.close()
 
 async def main():
     config = configparser.ConfigParser()
@@ -90,14 +107,7 @@ async def main():
 
     receiver = Receiver(args)
 
-    try:
-        await receiver.stream_samples()
-    except KeyboardInterrupt:
-        print("Server shutdown requested (Ctrl+C)")
-    finally:
-        receiver.pub_socket.close()
-        receiver.ctx.term()
-        print("ZeroMQ resources released")
+    await receiver.stream_samples()
 
 if __name__ == '__main__':
     asyncio.run(main())
