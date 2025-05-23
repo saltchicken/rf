@@ -13,7 +13,7 @@ import zmq.asyncio
 
 from .client import Reader
 
-plt.style.use('dark.mplstyle')
+plt.style.use('.dark.mplstyle')
 
 
 class RealTimeFFTVisualizer(Reader):
