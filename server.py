@@ -12,7 +12,7 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
-FREQ = 92e6
+FREQ = 106e6
 BUFFER_SIZE = 4096  # samples per buffer
 ZMQ_PORT = config['Network']['PORT']
 
