@@ -66,6 +66,10 @@ class Reader:
             self.stop_event.set()
             socket.close()
 
+class ReaderRecorder(Reader):
+    def __init__(self, args):
+        super().__init__(args)
+
     async def record_sample(self, duration_seconds=1):
         total_samples = []
         samples_recorded = 0
@@ -101,6 +105,10 @@ class Reader:
 
         write("output.wav", 48000, audio_int16)
         print("Saved FM audio to output.wav")
+
+class ReaderListener(Reader):
+    def __init__(self, args):
+        super().__init__(args)
 
     async def listen_sample(self):
         # PyAudio setup
@@ -178,14 +186,15 @@ async def main():
 
     args = parser.parse_args()
 
-    reader = Reader(args)
-    receive_task = asyncio.create_task(reader.receive_samples())
-
     if args.command == 'record':
-        record_task = asyncio.create_task(reader.record_sample(duration_seconds = args.duration))
+        reader_recorder = ReaderRecorder(args)
+        receive_task = asyncio.create_task(reader_recorder.receive_samples())
+        record_task = asyncio.create_task(reader_recorder.record_sample(duration_seconds = args.duration))
         await asyncio.gather(record_task, receive_task)
     elif args.command == 'listen':
-        listen_task = asyncio.create_task(reader.listen_sample())
+        reader_listener = ReaderListener(args)
+        receive_task = asyncio.create_task(reader_listener.receive_samples())
+        listen_task = asyncio.create_task(reader_listener.listen_sample())
         await asyncio.gather(listen_task, receive_task)
     else:
         raise ValueError(f"Unknown command: {args.command}")
