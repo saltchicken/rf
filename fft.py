@@ -13,12 +13,12 @@ import zmq.asyncio
 plt.style.use('dark.mplstyle')
 # plt.rcParams['toolbar'] = 'none'
 
-HOST = '10.0.0.5'
+HOST = '127.0.0.1'
 PORT = 5000
 CHUNK_SIZE = 4096
 ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = 10e6
+SAMPLE_RATE = 2e6
 DECIMATION_FACTOR = 64
 
 sample_queue = queue.Queue(maxsize=10)
