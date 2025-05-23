@@ -1,15 +1,19 @@
+import configparser
 import asyncio
 import struct
 import numpy as np
 from scipy.signal import decimate, firwin, lfilter
 from scipy.io.wavfile import write
 
-HOST = '127.0.0.1'
-PORT = 5000
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+HOST = config['Network']['HOST']
+PORT = config['Network']['PORT']
 CHUNK_SIZE = 4096
 ACCUM_CHUNKS = 10
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = 10e6
+SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
 
 stop_event = asyncio.Event()
 sample_queue = asyncio.Queue(maxsize=10)

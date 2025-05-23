@@ -1,13 +1,17 @@
+import configparser
 import asyncio
 import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_ constants
 import numpy as np
 import struct
 
-SAMPLE_RATE = 10e6
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
 FREQ = 92e6
 BUFFER_SIZE = 4096  # samples per buffer
-PORT = 5000
+PORT = config['Network']['PORT']
 
 # Global SDR variables
 sdr = None
