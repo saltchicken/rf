@@ -56,7 +56,7 @@ def get_args(virtual=False):
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
     if virtual:
-        return parse_args(['test'])
+        return parser.parse_args(['test'])
     else:
         return parser.parse_args()
 
