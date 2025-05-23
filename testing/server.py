@@ -4,22 +4,20 @@ import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_ constants
 import numpy as np
 import struct
-import zmq
-import zmq.asyncio
 
-# Load config
 config = configparser.ConfigParser()
 config.read('config.ini')
 
 SAMPLE_RATE = float(config['Processing']['SAMPLE_RATE'])
 FREQ = 92e6
 BUFFER_SIZE = 4096  # samples per buffer
-ZMQ_PORT = config['Network']['PORT']
+PORT = config['Network']['PORT']
 
 # Global SDR variables
 sdr = None
 rxStream = None
 
+# SDR setup (blocking part)
 def setup_sdr():
     results = SoapySDR.Device.enumerate()
     if not results:
@@ -32,11 +30,10 @@ def setup_sdr():
     sdr.setGain(SOAPY_SDR_RX, 0, 30)
     return sdr
 
-async def stream_samples(pub_socket, sdr, rxStream):
+async def stream_samples(writer, sdr, rxStream):
     rxStream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
     sdr.activateStream(rxStream)
     loop = asyncio.get_running_loop()
-
     try:
         while True:
             try:
@@ -47,10 +44,16 @@ async def stream_samples(pub_socket, sdr, rxStream):
                     if len(samples) != BUFFER_SIZE * 8:
                         print(f"Short read: {len(samples)} bytes. Breaking")
                         break
-                    # Send topic + message
-                    topic = b"samples"
                     length_prefix = struct.pack('!I', len(samples))
-                    await pub_socket.send_multipart([topic, length_prefix + samples])
+                    try:
+                        writer.write(length_prefix + samples)
+                        await writer.drain()
+                    except (ConnectionResetError, BrokenPipeError) as e:
+                        print(f"Client disconnected: {e.__class__.__name__}")
+                        break
+                    except Exception as e:
+                        print(f"Error sending data: {e}")
+                        break
                 else:
                     await asyncio.sleep(0.01)
             except Exception as e:
@@ -58,32 +61,45 @@ async def stream_samples(pub_socket, sdr, rxStream):
                 break
     except asyncio.CancelledError:
         pass
+    except KeyboardInterrupt:
+        print("Server shutdown requested (Ctrl+C)")
     finally:
         print("Closing SDR stream.")
         try:
             sdr.deactivateStream(rxStream)
-            sdr.closeStream(rxStream)
         except Exception as e:
-            print(f"Error deactivating/closing SDR stream: {e}")
+            print(f"Error deactivating SDR stream: {e}")
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except (ConnectionResetError, BrokenPipeError):
+            print("Connection already closed by client")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
+async def handle_client(reader, writer):
+    print(f"Client connected from {writer.get_extra_info('peername')}")
+    await stream_samples(writer, sdr, rxStream)
 
 async def main():
     global sdr
     sdr = setup_sdr()
-
-    context = zmq.asyncio.Context()
-    pub_socket = context.socket(zmq.PUB)
-    pub_socket.bind(f"tcp://0.0.0.0:{ZMQ_PORT}")
-    print(f"ZeroMQ PUB server broadcasting on port {ZMQ_PORT}")
-
+    
+    server = await asyncio.start_server(handle_client, host='0.0.0.0', port=PORT)
+    print(f"Async SDR server listening on port {PORT}")
     try:
-        await stream_samples(pub_socket, sdr, rxStream)
+        async with server:
+            await server.serve_forever()
     except KeyboardInterrupt:
         print("Server shutdown requested (Ctrl+C)")
+    except asyncio.CancelledError:
+        print("Server task cancelled")
     finally:
-        pub_socket.close()
-        context.term()
-        print("ZeroMQ resources released")
+        # Clean up SDR when server exits
+        if rxStream:
+            sdr.deactivateStream(rxStream)
+            sdr.closeStream(rxStream)
+        print("SDR resources released")
 
 if __name__ == '__main__':
     asyncio.run(main())
-
