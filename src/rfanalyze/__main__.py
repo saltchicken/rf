@@ -9,6 +9,18 @@ from .server import Receiver
 from pathlib import Path
 config_dir = f'{Path(__file__).parent}/config'
 
+def open_config_file():
+    import os, sys
+    try:
+        if sys.playform == 'darwin':
+            os.system(f'open {config_dir}/config.ini')
+        elif sys.platform == 'nt':
+            os.startfile(f'{config_dir}/config.ini')
+        else:
+            os.system(f'xdg-open {config_dir}/config.ini')
+    except:
+        print('Failed to open config file')
+
 async def run():
     config = configparser.ConfigParser()
     config.read(f'{config_dir}/config.ini')
@@ -40,6 +52,9 @@ async def run():
     receiver_parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.')
     receiver_parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.')
 
+    edit_parser = subparsers.add_parser('edit', help='Edit config file')
+    # edit_parser.add_argument('file', type=str, help='Config file to edit')
+
     args = parser.parse_args()
 
     if args.command == 'record':
@@ -58,6 +73,8 @@ async def run():
     elif args.command == 'server':
         receiver = Receiver(args)
         await receiver.stream_samples()
+    elif args.command == 'edit':
+        open_config_file()
     else:
         raise ValueError(f"Unknown command: {args.command}")
 
