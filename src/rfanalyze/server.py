@@ -93,24 +93,3 @@ class Receiver:
         finally:
             await asyncio.sleep(1)
             self.close()
-
-async def main():
-    config = configparser.ConfigParser()
-    config.read('config.ini')
-
-    parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
-    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.',)
-    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.',)
-    parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.',)
-    parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.',)
-    parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.',)
-
-    args = parser.parse_args()
-
-    receiver = Receiver(args)
-
-    await receiver.stream_samples()
-
-if __name__ == '__main__':
-    asyncio.run(main())
-

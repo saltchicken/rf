@@ -4,6 +4,7 @@ import asyncio
 
 from .client import ReaderListener, ReaderRecorder
 from .fft import RealTimeFFTVisualizer
+from .server import Receiver
 
 async def run():
     config = configparser.ConfigParser()
@@ -31,6 +32,11 @@ async def run():
     fft_parser.add_argument('--chunks_per_frame', type=int, default=config['FFT']['CHUNKS_PER_FRAME'], help='Chunks to accumalate per FFT calculation')
     fft_parser.add_argument('--decimation_factor', type=int, default=config['FFT']['DECIMATION_FACTOR'], help='Decimation factor for FFT calculation')
 
+    receiver_parser = subparsers.add_parser('server', parents=[parent_parser], help='Run FM receiver as a server')
+    receiver_parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.')
+    receiver_parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.')
+    receiver_parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.')
+
     args = parser.parse_args()
 
     if args.command == 'record':
@@ -46,6 +52,9 @@ async def run():
     elif args.command == 'fft':
         fft_visualizer = RealTimeFFTVisualizer(args)
         fft_visualizer.run()
+    elif args.command == 'server':
+        receiver = Receiver(args)
+        await receiver.stream_samples()
     else:
         raise ValueError(f"Unknown command: {args.command}")
 
