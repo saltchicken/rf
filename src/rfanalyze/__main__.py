@@ -7,11 +7,11 @@ from .fft import RealTimeFFTVisualizer
 from .server import Receiver
 
 from pathlib import Path
-script_dir = Path(__file__).parent
+config_dir = f'{Path(__file__).parent}/config'
 
 async def run():
     config = configparser.ConfigParser()
-    config.read(f'{script_dir}/config/config.ini')
+    config.read(f'{config_dir}/config.ini')
 
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')

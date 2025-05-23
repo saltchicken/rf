@@ -14,8 +14,8 @@ import zmq.asyncio
 from .client import Reader
 
 from pathlib import Path
-script_dir = Path(__file__).parent
-plt.style.use(f'{script_dir}/config/dark.mplstyle')
+config_dir = f'{Path(__file__).parent}/config'
+plt.style.use(f'{config_dir}/dark.mplstyle')
 
 
 class RealTimeFFTVisualizer(Reader):
