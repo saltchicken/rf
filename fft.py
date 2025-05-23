@@ -1,4 +1,5 @@
 import asyncio
+import argparse, configparser
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,114 +11,80 @@ import signal
 import zmq
 import zmq.asyncio
 
+from client import Reader
+
 plt.style.use('dark.mplstyle')
-# plt.rcParams['toolbar'] = 'none'
-
-HOST = '127.0.0.1'
-PORT = 5000
-CHUNK_SIZE = 4096
-ACCUM_CHUNKS = 10
-FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
-SAMPLE_RATE = 2e6
-DECIMATION_FACTOR = 64
-
-sample_queue = queue.Queue(maxsize=10)
-stop_event = threading.Event()
-
-ctx = zmq.asyncio.Context()
-
-def complex_from_bytes(data):
-    samples = np.frombuffer(data, dtype=np.float32)
-    return samples[0::2] + 1j * samples[1::2]
-
-def on_key(event):
-    if event.key == 'q':
-        print("Detected 'q' key press. Quitting...")
-        stop_event.set()
-
-async def receive_samples():
-    socket = ctx.socket(zmq.SUB)
-    socket.connect(f"tcp://{HOST}:{PORT}")
-    socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
-    buffer = np.array([], dtype=np.complex64)
-
-    try:
-        while not stop_event.is_set():
-            topic, length, samples = await socket.recv_multipart()  # Receives one full message
-            length = struct.unpack('!I', length)[0]
-            data = samples
-            if len(data) % 8 != 0:
-                print(f"Received invalid buffer of length {len(data)}")
-                continue
-            samples = complex_from_bytes(data)
-
-            buffer = np.concatenate((buffer, samples))
-
-            if len(buffer) >= FFT_SIZE:
-                try:
-                    sample_queue.put_nowait(buffer[:FFT_SIZE])
-                except queue.Full:
-                    print("Queue full. Dropping frame.")
-                    pass
-
-                buffer = buffer[FFT_SIZE:]
-                if buffer.shape != (0,):
-                    print(f"Buffer shape error: {buffer.shape}")
-                # buffer = np.array([], dtype=np.complex64)
 
 
-    except asyncio.IncompleteReadError:
-        print("Server closed the connection.")
-    except asyncio.CancelledError:
-        print("Cancelled receive_samples.")
-    finally:
-        stop_event.set()
+class RealTimeFFTVisualizer(Reader):
+    def __init__(self, args):
+        super().__init__(args)
+        self.chunk_size = 65536
+        self.DECIMATION_FACTOR = 64
 
-def run_asyncio_loop():
-    asyncio.run(receive_samples())
+        self.fig, self.ax = plt.subplots(figsize=(10, 6))
+        self.fig.canvas.mpl_connect('key_press_event', self.on_key)
 
-def update(frame):
-    if not sample_queue.empty():
-        samples = sample_queue.get_nowait()
-        fft_result = np.fft.fftshift(np.fft.fft(samples))
-        magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
-        magnitude = magnitude[::DECIMATION_FACTOR]
-        line.set_ydata(magnitude)
-    return line,
+        x = np.linspace(-self.sample_rate / 2, self.sample_rate / 2, self.chunk_size // self.DECIMATION_FACTOR)
+        self.line, = self.ax.plot(x, np.zeros(self.chunk_size // self.DECIMATION_FACTOR))
 
-# Plot setup
-fig, ax = plt.subplots(figsize=(10, 6))
-fig.canvas.mpl_connect('key_press_event', on_key)
+        self.ax.set_xlim(-self.sample_rate / 2, self.sample_rate / 2)
+        self.ax.set_ylim(-100, 100)
+        self.ax.set_xlabel('Frequency (Hz)')
+        self.ax.set_ylabel('Magnitude (dB)')
+        self.ax.set_title('Real-time FFT from SDR samples')
+        self.ax.grid(True, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
 
-x = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, FFT_SIZE // DECIMATION_FACTOR)
-line, = ax.plot(x, np.zeros(FFT_SIZE // DECIMATION_FACTOR))
+        xticks = np.linspace(-self.sample_rate / 2, self.sample_rate / 2, 19)
+        xtick_labels = [f'{x / 1e6:.1f} MHz' for x in xticks]
+        self.ax.set_xticks(xticks)
+        self.ax.set_xticklabels(xtick_labels)
 
-ax.set_xlim(-SAMPLE_RATE/2, SAMPLE_RATE/2)
-ax.set_ylim(-100, 100)
-ax.set_xlabel('Frequency (Hz)')
-ax.set_ylabel('Magnitude (dB)')
-ax.set_title('Real-time FFT from SDR samples')
-ax.grid(True, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
+    def complex_from_bytes(self, data):
+        samples = np.frombuffer(data, dtype=np.float32)
+        return samples[0::2] + 1j * samples[1::2]
+
+    def on_key(self, event):
+        if event.key == 'q':
+            print("Detected 'q' key press. Quitting...")
+            self.stop_event.set()
+
+    def run_asyncio_loop(self):
+        asyncio.run(self.receive_samples())
+
+    def update_plot(self, frame):
+        if not self.sample_queue.empty():
+            samples = self.sample_queue.get_nowait()
+            fft_result = np.fft.fftshift(np.fft.fft(samples))
+            magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
+            magnitude = magnitude[::self.DECIMATION_FACTOR]
+            self.line.set_ydata(magnitude)
+        return self.line,
+
+    def run(self):
+        async_thread = threading.Thread(target=self.run_asyncio_loop, daemon=True)
+        async_thread.start()
+
+        ani = FuncAnimation(self.fig, self.update_plot, interval=0, blit=True, cache_frame_data=False)
+        try:
+            plt.show()
+        finally:
+            self.stop_event.set()
+            async_thread.join()
 
 
-# Add tick labels at the min and max frequency
-xticks = np.linspace(-SAMPLE_RATE/2, SAMPLE_RATE/2, 19)  # 9 points from -1 MHz to 1 MHz
-xtick_labels = [f'{x/1e6:.1f} MHz' for x in xticks]
-# xticks = [-SAMPLE_RATE/2, 0, SAMPLE_RATE/2]
-# xtick_labels = [f'{-SAMPLE_RATE/2/1e6:.1f} MHz', '0 Hz', f'{SAMPLE_RATE/2/1e6:.1f} MHz']
-ax.set_xticks(xticks)
-ax.set_xticklabels(xtick_labels)
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-# Start the asyncio thread
-async_thread = threading.Thread(target=run_asyncio_loop, daemon=True)
-async_thread.start()
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
+    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
+    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
+    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
+    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
 
-# Start the animation
-ani = FuncAnimation(fig, update, interval=0, blit=True, cache_frame_data=False)
+    args = parser.parse_args()
 
-try:
-    plt.show()
-finally:
-    stop_event.set()
-    async_thread.join()
-
+    visualizer = RealTimeFFTVisualizer(args)
+    visualizer.run()
