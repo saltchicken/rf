@@ -158,20 +158,38 @@ async def main():
     config = configparser.ConfigParser()
     config.read('config.ini')
 
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
+    parent_parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
+    parent_parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
+    parent_parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
+    parent_parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
+
+    # Main parser
     parser = argparse.ArgumentParser(description='FM receiver and demodulator.')
-    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
-    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
-    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
-    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
-    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    # Subparser: listen
+    listen_parser = subparsers.add_parser('listen', parents=[parent_parser], help='Listen to FM broadcast')
+
+    # Subparser: record
+    record_parser = subparsers.add_parser('record', parents=[parent_parser], help='Record FM to file')
+    record_parser.add_argument('--duration', type=int, default=1, help='Recording duration in seconds')
 
     args = parser.parse_args()
 
     reader = Reader(args)
-    # listen_task = asyncio.create_task(reader.listen_sample())
-    record_task = asyncio.create_task(reader.record_sample())
     receive_task = asyncio.create_task(reader.receive_samples())
-    await asyncio.gather(receive_task, record_task)
+
+    if args.command == 'record':
+        record_task = asyncio.create_task(reader.record_sample(duration_seconds = args.duration))
+        await asyncio.gather(record_task, receive_task)
+    elif args.command == 'listen':
+        listen_task = asyncio.create_task(reader.listen_sample())
+        await asyncio.gather(listen_task, receive_task)
+    else:
+        raise ValueError(f"Unknown command: {args.command}")
+
 
 if __name__ == '__main__':
     asyncio.run(main())
