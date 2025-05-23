@@ -21,7 +21,7 @@ def open_config_file():
     except Exception as e:
         print(f'Failed to open config file: {e}')
 
-async def run():
+def get_args():
     config = configparser.ConfigParser()
     config.read(f'{config_dir}/config.ini')
 
@@ -41,7 +41,7 @@ async def run():
 
     # Subparser: record
     record_parser = subparsers.add_parser('record', parents=[parent_parser], help='Record FM to file')
-    record_parser.add_argument('--duration', type=int, default=1, help='Recording duration in seconds')
+    record_parser.add_argument('--duration', type=int, default=config['Recording']['DURATION'], help='Recording duration in seconds')
 
     fft_parser = subparsers.add_parser('fft', parents=[parent_parser], help='Real-time FFT visualization')
     fft_parser.add_argument('--chunks_per_frame', type=int, default=config['FFT']['CHUNKS_PER_FRAME'], help='Chunks to accumalate per FFT calculation')
@@ -55,7 +55,10 @@ async def run():
     edit_parser = subparsers.add_parser('edit', help='Edit config file')
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+async def run():
+    args = get_args()
 
     if args.command == 'record':
         reader_recorder = ReaderRecorder(args)
