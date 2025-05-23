@@ -16,7 +16,7 @@ config.read('config.ini')
 HOST = config['Network']['HOST']  # e.g., '127.0.0.1'
 PORT = config['Network']['PORT']  # e.g., '5556'
 CHUNK_SIZE = 4096
-ACCUM_CHUNKS = 10
+ACCUM_CHUNKS = 16
 FFT_SIZE = CHUNK_SIZE * ACCUM_CHUNKS
 
 def fm_demodulate(iq):
@@ -114,12 +114,13 @@ class Reader:
                         channels=1,
                         rate=48000,
                         output=True,
-                        frames_per_buffer=4096)
+                        frames_per_buffer=1024)
 
         try:
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
                 self.sample_queue.task_done()
+                print(len(samples))
 
                 # Frequency shift
                 t = np.arange(len(samples)) / self.sample_rate
@@ -142,7 +143,10 @@ class Reader:
 
                 # Normalize and convert to int16
                 audio /= np.max(np.abs(audio) + 1e-9)  # prevent division by zero
+                volume = 0.25  # 25% volume
+                audio *= volume
                 audio_int16 = np.int16(audio * 32767)
+
 
                 # Stream to audio output
                 stream.write(audio_int16.tobytes())
