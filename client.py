@@ -109,7 +109,7 @@ class Reader:
                         channels=1,
                         rate=48000,
                         output=True,
-                        frames_per_buffer=1024)
+                        frames_per_buffer=4096)
 
         try:
             while not self.stop_event.is_set():
@@ -168,9 +168,10 @@ async def main():
     args = parser.parse_args()
 
     reader = Reader(args)
-    consumer_task = asyncio.create_task(reader.record_sample())
-    producer_task = asyncio.create_task(reader.receive_samples())
-    await asyncio.gather(producer_task, consumer_task)
+    # listen_task = asyncio.create_task(reader.listen_sample())
+    record_task = asyncio.create_task(reader.record_sample())
+    receive_task = asyncio.create_task(reader.receive_samples())
+    await asyncio.gather(receive_task, record_task)
 
 if __name__ == '__main__':
     asyncio.run(main())
