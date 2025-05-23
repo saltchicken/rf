@@ -27,6 +27,7 @@ def setup_sdr():
     
     args = results[0]
     sdr = SoapySDR.Device(args)
+    # sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW")
     sdr.setSampleRate(SOAPY_SDR_RX, 0, SAMPLE_RATE)
     sdr.setFrequency(SOAPY_SDR_RX, 0, FREQ)
     gain_range = sdr.getGainRange(SOAPY_SDR_RX, 0)
@@ -57,7 +58,7 @@ async def stream_samples(pub_socket, sdr, rxStream):
                     await asyncio.sleep(0.01)
             except Exception as e:
                 print(f"Error during stream processing: {e}")
-                break
+                brea
     except asyncio.CancelledError:
         pass
     finally:
