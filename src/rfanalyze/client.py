@@ -103,7 +103,7 @@ class ReaderRecorder(Reader):
         audio /= np.max(np.abs(audio))
         audio_int16 = np.int16(audio * 32767)
 
-        write(self.output_file, 48000, audio_int16)
+        write(self.output_filename, 48000, audio_int16)
         print("Saved FM audio to output.wav")
 
         return audio_int16
