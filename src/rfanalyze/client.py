@@ -68,6 +68,7 @@ class ReaderRecorder(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.duration_seconds = args.duration
+        self.output_file = args.output_file
 
     async def record_sample(self):
         total_samples = []
@@ -102,7 +103,7 @@ class ReaderRecorder(Reader):
         audio /= np.max(np.abs(audio))
         audio_int16 = np.int16(audio * 32767)
 
-        write("output.wav", 48000, audio_int16)
+        write(self.output_file, 48000, audio_int16)
         print("Saved FM audio to output.wav")
 
         return audio_int16
