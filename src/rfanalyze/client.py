@@ -68,7 +68,7 @@ class ReaderRecorder(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.duration_seconds = args.duration
-        self.output_file = args.output_file
+        self.output_filename = args.output_filename
 
     async def record_sample(self):
         total_samples = []
