@@ -65,7 +65,7 @@ async def run():
 
     if args.command == 'record':
         reader_recorder = ReaderRecorder(args)
-        reader_recorder.run()
+        await reader_recorder.run()
     elif args.command == 'listen':
         reader_listener = ReaderListener(args)
         receive_task = asyncio.create_task(reader_listener.receive_samples())
