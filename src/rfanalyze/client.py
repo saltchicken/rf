@@ -67,8 +67,9 @@ class Reader:
 class ReaderRecorder(Reader):
     def __init__(self, args):
         super().__init__(args)
+        self.duration_seconds = args.duration
 
-    async def record_sample(self, duration_seconds=1):
+    async def record_sample(self):
         total_samples = []
         samples_recorded = 0
         while not self.stop_event.is_set():
@@ -78,7 +79,7 @@ class ReaderRecorder(Reader):
             total_samples.append(samples)
             self.sample_queue.task_done()
 
-            if samples_recorded >= self.sample_rate * duration_seconds:
+            if samples_recorded >= self.sample_rate * self.duration_seconds:
                 self.stop_event.set()
 
         samples = np.concatenate(total_samples, axis=0)
@@ -103,6 +104,11 @@ class ReaderRecorder(Reader):
 
         write("output.wav", 48000, audio_int16)
         print("Saved FM audio to output.wav")
+
+    async def run(self):
+        receive_task = asyncio.create_task(self.receive_samples())
+        record_task = asyncio.create_task(self.record_sample())
+        await asyncio.gather(receive_task, record_task)
 
 class ReaderListener(Reader):
     def __init__(self, args):
