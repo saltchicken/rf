@@ -105,10 +105,13 @@ class ReaderRecorder(Reader):
         write("output.wav", 48000, audio_int16)
         print("Saved FM audio to output.wav")
 
+        return audio_int16
+
     async def run(self):
         receive_task = asyncio.create_task(self.receive_samples())
         record_task = asyncio.create_task(self.record_sample())
-        await asyncio.gather(receive_task, record_task)
+        results = await asyncio.gather(receive_task, record_task)
+        print(results)
 
 class ReaderListener(Reader):
     def __init__(self, args):
@@ -165,4 +168,3 @@ class ReaderListener(Reader):
             stream.close()
             p.terminate()
             self.stop_event.set()
-
