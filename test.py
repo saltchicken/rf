@@ -5,7 +5,7 @@ async def run_recorder_instance(index, freq_offset):
     args = get_args('record')
     args.index = index
     args.freq_offset = freq_offset
-    args.output_file = f'output_{index}.wav'
+    args.output_filename = f'output_{index}.wav'
 
     reader_recorder = ReaderRecorder(args)
     results = await reader_recorder.run()
