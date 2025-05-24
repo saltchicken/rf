@@ -108,10 +108,10 @@ class ReaderRecorder(Reader):
         return audio_int16
 
     async def run(self):
-        receive_task = asyncio.create_task(self.receive_samples())
         record_task = asyncio.create_task(self.record_sample())
-        results = await asyncio.gather(receive_task, record_task)
-        print(results)
+        receive_task = asyncio.create_task(self.receive_samples())
+        results = await asyncio.gather(record_task, receive_task)
+        return results[0]
 
 class ReaderListener(Reader):
     def __init__(self, args):
