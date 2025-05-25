@@ -102,6 +102,11 @@ async def run():
     config.read(f'{config_dir}/config.ini')
 
     parser = argparse.ArgumentParser(description='FM receiver and demodulator')
+    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
+    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
+    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
+    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
+    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
     parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.')
     parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.')
     parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.')
