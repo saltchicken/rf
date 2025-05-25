@@ -138,12 +138,6 @@ class ReaderListener(Reader):
                 audio_chunk = audio_queue.get_nowait()
             except queue.Empty:
                 audio_chunk = b'\x00' * frame_count * 2
-                    # print("silenece")
-                    # audio_chunk = b'\x00' * frame_count * 2
-            # if len(audio_chunk) != frame_count:
-            #     print(f"Audio chunk length mismatch: {len(audio_chunk)} != {frame_count}")
-            #     audio_chunk = b'\x00' * frame_count * 2
-            #     return audio_chunk, pyaudio.paContinue
             return (audio_chunk, pyaudio.paContinue)
 
         p = pyaudio.PyAudio()
@@ -166,21 +160,6 @@ class ReaderListener(Reader):
             stream.stop_stream()
             stream.close()
             p.terminate()
-
-        # try:
-        #     while not self.audio_queue_stop_event.is_set():
-        #         audio_chunk = self.audio_queue.get()
-        #         if audio_chunk is None:
-        #             break
-        #         stream.write(audio_chunk)
-        # except Exception as e:
-        #     print(f"Error in audio_process_worker: {e}")
-        # finally:
-        #     print("Closing audio_process_worker")
-        #     stream.stop_stream()
-        #     stream.close()
-        #     p.terminate()
-
 
     async def listen_sample(self):
         try:
