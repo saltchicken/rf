@@ -7,6 +7,9 @@ import struct
 import zmq
 import zmq.asyncio
 
+from pathlib import Path
+config_dir = f'{Path(__file__).parent}/config'
+
 class Receiver:
     def __init__(self, args):
         self.port = args.port
