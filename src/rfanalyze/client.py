@@ -122,21 +122,21 @@ class ReaderRecorder(Reader):
 class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
-        self.audio_queue = multiprocessing.Queue(maxsize=10)
+        self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
         self.audio_proc = Process(target=self.audio_process_worker)
         self.audio_proc.start()
 
     def audio_process_worker(self):
         def callback(in_data, frame_count, time_info, status):
+            if self.audio_queue_stop_event.is_set():
+                return None, pyaudio.paComplete
             try:
                 audio_chunk = self.audio_queue.get_nowait()
             except queue.Empty:
-                print("empty")
                 audio_chunk = b'\x00' * frame_count * 2
-            except Exception as e:
-                print(f"Error in audio_process_worker: {e}")
-                return None, pyaudio.paComplete
+                    # print("silenece")
+                    # audio_chunk = b'\x00' * frame_count * 2
             # if len(audio_chunk) != frame_count:
             #     print(f"Audio chunk length mismatch: {len(audio_chunk)} != {frame_count}")
             #     audio_chunk = b'\x00' * frame_count * 2
@@ -149,12 +149,13 @@ class ReaderListener(Reader):
                         rate=48000,
                         output=True,
                         stream_callback=callback,
-                        frames_per_buffer=100
+                        frames_per_buffer=1024
                         )
         stream.start_stream()
         try:
-            while not self.audio_queue_stop_event.is_set():
+            while stream.is_active():
                 time.sleep(0.1)
+
         except Exception as e:
             print(f"Error in audio_process_worker: {e}")
         finally:
@@ -180,10 +181,10 @@ class ReaderListener(Reader):
 
     async def listen_sample(self):
         try:
+            final = np.array([], dtype=np.int16)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
                 self.sample_queue.task_done()
-                print(len(samples))
 
                 # Frequency shift
                 t = np.arange(len(samples)) / self.sample_rate
@@ -211,8 +212,16 @@ class ReaderListener(Reader):
                 audio_int16 = np.int16(audio * 32767)
 
 
+                final = np.concatenate((final, audio_int16))
+
+
                 # Stream to audio output
-                self.audio_queue.put(audio_int16.tobytes())
+                if len(final) >= 1024:
+                    try:
+                        self.audio_queue.put_nowait(final[:1024])
+                        final = final[1024:]
+                    except queue.Full:
+                        print("Audio Queue full. Dropping frame.")
         except asyncio.CancelledError:
             print("Cancelled record_sample.")
         except Exception as e:
