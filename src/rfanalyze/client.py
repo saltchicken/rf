@@ -127,15 +127,15 @@ class ReaderListener(Reader):
         super().__init__(args)
         self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
-        self.audio_proc = Process(target=self.audio_process_worker)
+        self.audio_proc = Process(target=self.audio_process_worker, args=(self.audio_queue, self.audio_queue_stop_event))
         self.audio_proc.start()
 
-    def audio_process_worker(self):
+    def audio_process_worker(self, audio_queue, audio_queue_stop_event):
         def callback(in_data, frame_count, time_info, status):
-            if self.audio_queue_stop_event.is_set():
+            if audio_queue_stop_event.is_set():
                 return None, pyaudio.paComplete
             try:
-                audio_chunk = self.audio_queue.get_nowait()
+                audio_chunk = audio_queue.get_nowait()
             except queue.Empty:
                 audio_chunk = b'\x00' * frame_count * 2
                     # print("silenece")
