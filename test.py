@@ -17,6 +17,8 @@ async def main():
         run_recorder_instance(1, 1e5),
         run_recorder_instance(2, 2e5),
         run_recorder_instance(3, 3e5),
+        run_recorder_instance(4, 4e5),
+        run_recorder_instance(5, 5e5),
     )
 
 

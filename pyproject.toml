@@ -9,8 +9,7 @@ dependencies = [
   "numpy",
   "matplotlib",
   "zmq",
-  "pyaudio",
-  "PyQt6"
+  "pyaudio"
 ]
 
 [project.scripts]
