@@ -2,3 +2,5 @@ numpy
 matplotlib
 PyQt6
 pyaudio
+zmq
+pyaudio
