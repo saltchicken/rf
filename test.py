@@ -1,9 +1,11 @@
-import multiprocessing
+from multiprocessing import Pool
 import asyncio
 from rfanalyze import ReaderRecorder, get_args
 
 
-def run_recorder_instance(index, freq_offset):
+def run_recorder_instance(index_freq):
+    index, freq_offset = index_freq
+
     async def runner():
         args = get_args('record')
         args.index = index
@@ -11,25 +13,22 @@ def run_recorder_instance(index, freq_offset):
         args.output_filename = f'output_{index}.wav'
 
         reader_recorder = ReaderRecorder(args)
-        await reader_recorder.run()
+        reader_recorder.save = False
+        return await reader_recorder.run()
 
-    asyncio.run(runner())
+    return asyncio.run(runner())
 
 
 def main():
-    processes = []
     freq_offsets = [0, 1e5, 2e5, 3e5, 4e5, 5e5]
+    args_list = [(i, f) for i, f in enumerate(freq_offsets)]
 
-    for index, freq in enumerate(freq_offsets):
-        p = multiprocessing.Process(target=run_recorder_instance, args=(index, freq))
-        p.start()
-        processes.append(p)
+    with Pool(processes=len(args_list)) as pool:
+        results = pool.map(run_recorder_instance, args_list)
 
-    # Wait for all processes to complete
-    for p in processes:
-        p.join()
+    for index, result in enumerate(results):
+        print(f"Process {index} result: {result}")
 
 
 if __name__ == '__main__':
-    multiprocessing.set_start_method('spawn')  # Ensure compatibility on macOS/Windows
     main()
