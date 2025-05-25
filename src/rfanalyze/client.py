@@ -5,6 +5,11 @@ import zmq
 import zmq.asyncio
 from scipy.signal import decimate, firwin, lfilter, resample_poly
 from scipy.io.wavfile import write
+import time
+
+import multiprocessing
+from multiprocessing import Process, Queue
+import queue
 
 import pyaudio
 
@@ -117,16 +122,63 @@ class ReaderRecorder(Reader):
 class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
+        self.audio_queue = multiprocessing.Queue(maxsize=10)
+        self.audio_queue_stop_event = multiprocessing.Event()
+        self.audio_proc = Process(target=self.audio_process_worker)
+        self.audio_proc.start()
 
-    async def listen_sample(self):
-        # PyAudio setup
+    def audio_process_worker(self):
+        def callback(in_data, frame_count, time_info, status):
+            try:
+                audio_chunk = self.audio_queue.get_nowait()
+            except queue.Empty:
+                print("empty")
+                audio_chunk = b'\x00' * frame_count * 2
+            except Exception as e:
+                print(f"Error in audio_process_worker: {e}")
+                return None, pyaudio.paComplete
+            # if len(audio_chunk) != frame_count:
+            #     print(f"Audio chunk length mismatch: {len(audio_chunk)} != {frame_count}")
+            #     audio_chunk = b'\x00' * frame_count * 2
+            #     return audio_chunk, pyaudio.paContinue
+            return (audio_chunk, pyaudio.paContinue)
+
         p = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16,
                         channels=1,
                         rate=48000,
                         output=True,
-                        frames_per_buffer=4096)
+                        stream_callback=callback,
+                        frames_per_buffer=100
+                        )
+        stream.start_stream()
+        try:
+            while not self.audio_queue_stop_event.is_set():
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"Error in audio_process_worker: {e}")
+        finally:
+            print("Closing audio_process_worker")
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
 
+        # try:
+        #     while not self.audio_queue_stop_event.is_set():
+        #         audio_chunk = self.audio_queue.get()
+        #         if audio_chunk is None:
+        #             break
+        #         stream.write(audio_chunk)
+        # except Exception as e:
+        #     print(f"Error in audio_process_worker: {e}")
+        # finally:
+        #     print("Closing audio_process_worker")
+        #     stream.stop_stream()
+        #     stream.close()
+        #     p.terminate()
+
+
+    async def listen_sample(self):
         try:
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
@@ -160,12 +212,11 @@ class ReaderListener(Reader):
 
 
                 # Stream to audio output
-                stream.write(audio_int16.tobytes())
+                self.audio_queue.put(audio_int16.tobytes())
         except asyncio.CancelledError:
             print("Cancelled record_sample.")
+        except Exception as e:
+            print(f"Error in record_sample: {e}")
         finally:
-            print("Shutting down audio playback.")
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
             self.stop_event.set()
+            self.audio_queue_stop_event.set()
