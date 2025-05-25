@@ -206,7 +206,10 @@ class ReaderListener(Reader):
                 audio = resample_poly(fm_demod, up=1, down=decimation_factor)
 
                 # Normalize and convert to int16
-                audio /= np.max(np.abs(audio) + 1e-9)  # prevent division by zero
+                max_val = np.max(np.abs(audio))
+                if max_val < 1e-9:
+                    max_val = 1e-9
+                audio /= max_val
                 volume = 0.25  # 25% volume
                 audio *= volume
                 audio_int16 = np.int16(audio * 32767)
