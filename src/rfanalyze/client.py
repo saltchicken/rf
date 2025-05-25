@@ -75,8 +75,6 @@ class ReaderRecorder(Reader):
         self.duration_seconds = args.duration
         self.output_filename = args.output_filename
 
-        self.save = True
-
     async def record_sample(self):
         total_samples = []
         samples_recorded = 0
@@ -110,7 +108,7 @@ class ReaderRecorder(Reader):
         audio /= np.max(np.abs(audio))
         audio_int16 = np.int16(audio * 32767)
 
-        if self.save:
+        if self.output_filename is not None:
             write(self.output_filename, 48000, audio_int16)
             print(f"Saved FM audio to {self.output_filename}")
 
