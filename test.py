@@ -11,8 +11,18 @@ import tensorflow_hub as hub
 
 import pandas as pd
 
+import time
+import configparser
+
+from pathlib import Path
+config_dir = f'{Path(__file__).parent}/config'
+
+
+start = time.time()
 yamnet_model_handle = "yamnet"
 yamnet = hub.load(yamnet_model_handle)
+end = time.time()
+print(f'Loading model took {end - start} seconds')
 
 def downsample_audio(audio_int16, orig_sr=48000, target_sr=16000):
     n_samples = int(len(audio_int16) * target_sr / orig_sr)
@@ -81,7 +91,7 @@ def run_recorder_instance(index_freq):
         args = get_args('record')
         args.index = index
         args.freq_offset = freq_offset
-        args.output_filename = f'output_{index}.wav'
+        args.output_filename = f'output_{index:03d}.wav'
 
         reader_recorder = ReaderRecorder(args)
         return await reader_recorder.run()
@@ -90,7 +100,17 @@ def run_recorder_instance(index_freq):
 
 
 def main():
-    freq_offsets = [1e5, 1.5e5, 2e5, 3.5e5, 4e5, 4.5e5]
+    config = configparser.ConfigParser()
+    config.read(f'./src/rfanalyze/config/config.ini')
+
+    # TODO: Fix these
+    sample_rate = float(config['Processing']['SAMPLE_RATE'])
+    center_freq = config['Server']['CENTER_FREQ']
+    channel_width = 1e5
+    channel_width = int(sample_rate // 20)
+    freq_offsets = [i * channel_width for i in range(20)]
+    mid_offset = (len(freq_offsets) - 1) // 2 * channel_width
+    centered_freq_offsets = [f - mid_offset for f in freq_offsets]
     args_list = [(i, f) for i, f in enumerate(freq_offsets)]
 
     with Pool(processes=len(args_list)) as pool:
