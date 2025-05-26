@@ -2,11 +2,8 @@ from multiprocessing import Pool
 import asyncio
 import numpy as np
 from rfanalyze import ReaderRecorder, get_args
-
-from scipy.signal import butter, lfilter
 from scipy.signal import resample
 
-import webrtcvad
 from pyAudioAnalysis import ShortTermFeatures
 
 def downsample_audio(audio_int16, orig_sr=48000, target_sr=16000):
@@ -78,8 +75,6 @@ def main():
         # mean_features = np.mean(feature, axis=1)
         # for name, value in zip(names, mean_features):
         #     print(f"Process {index} {name}: {value}")
-        #
-
 
 if __name__ == '__main__':
     main()
