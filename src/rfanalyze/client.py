@@ -5,6 +5,7 @@ import zmq
 import zmq.asyncio
 from scipy.signal import decimate, firwin, lfilter, resample_poly, windows
 from scipy.io.wavfile import write
+from scipy.ndimage import gaussian_filter1d
 import time
 
 import multiprocessing
@@ -252,6 +253,8 @@ class ReaderFFT(Reader):
 
                 signal = Signal(samples, self.sample_rate)
                 magnitude = signal.fft(self.fft_size)
+
+                magnitude = gaussian_filter1d(magnitude, sigma=2)
 
                 data = np.concatenate((freqs, magnitude)).tobytes()
                 self.publisher.publisher.send(data)
