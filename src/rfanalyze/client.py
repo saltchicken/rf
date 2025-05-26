@@ -12,6 +12,7 @@ from multiprocessing import Process, Queue
 import queue
 
 import pyaudio
+import wavescope
 
 
 def fm_demodulate(iq):
@@ -213,3 +214,41 @@ class ReaderListener(Reader):
         finally:
             self.stop_event.set()
             self.audio_queue_stop_event.set()
+
+class ReaderFFT(Reader):
+    def __init__(self, args):
+        super().__init__(args)
+
+    async def analyze_sample(self, publisher):
+        total_samples = []
+        samples_recorded = 0
+        # TODO: Calculate the actual frequencies
+        freqs = np.linspace(0, 24000, 1024, dtype=np.float32)
+        while not self.stop_event.is_set():
+            samples = await self.sample_queue.get()
+            # print(f"Received buffer length: {len(samples)}")
+            samples_recorded += 1
+            total_samples.append(samples)
+            self.sample_queue.task_done()
+
+            if samples_recorded >= 16: # 32, 64, 128
+                samples_recorded = 0
+
+                samples = np.concatenate(total_samples, axis=0)
+                print(f"Received buffer length: {len(samples)}")
+                total_samples = []
+                fft_result = np.fft.fftshift(np.fft.fft(samples, n=1024))
+                mags = 20 * np.log10(np.abs(fft_result) + 1e-12)
+
+                data = np.concatenate((freqs, mags)).tobytes()
+                publisher.send(data)
+
+
+        return magnitude
+
+    async def run(self):
+        publisher = wavescope.Publisher()
+        record_task = asyncio.create_task(self.analyze_sample(publisher.publisher))
+        receive_task = asyncio.create_task(self.receive_samples())
+        results = await asyncio.gather(record_task, receive_task, publisher.server_task)
+        return results[0]

@@ -2,7 +2,7 @@ import argparse
 import configparser
 import asyncio
 
-from .client import ReaderListener, ReaderRecorder
+from .client import ReaderListener, ReaderRecorder, ReaderFFT
 from .fft import RealTimeFFTVisualizer
 
 from pathlib import Path
@@ -67,8 +67,10 @@ async def run():
         listen_task = asyncio.create_task(reader_listener.listen_sample())
         await asyncio.gather(listen_task, receive_task)
     elif args.command == 'fft':
-        fft_visualizer = RealTimeFFTVisualizer(args)
-        fft_visualizer.run()
+        reader_fft = ReaderFFT(args)
+        await reader_fft.run()
+        # fft_visualizer = RealTimeFFTVisualizer(args)
+        # fft_visualizer.run()
     elif args.command == 'edit':
         open_config_file()
     else:
