@@ -230,8 +230,10 @@ class ReaderFFT(Reader):
         super().__init__(args)
         self.fft_size = 1024
 
+        self.publisher = wavescope.Publisher()
 
-    async def analyze_sample(self, publisher):
+
+    async def analyze_sample(self):
         total_samples = []
         samples_recorded = 0
 
@@ -252,14 +254,13 @@ class ReaderFFT(Reader):
                 magnitude = signal.fft(self.fft_size)
 
                 data = np.concatenate((freqs, magnitude)).tobytes()
-                publisher.send(data)
+                self.publisher.publisher.send(data)
 
 
         return magnitude
 
     async def run(self):
-        publisher = wavescope.Publisher()
-        record_task = asyncio.create_task(self.analyze_sample(publisher.publisher))
+        record_task = asyncio.create_task(self.analyze_sample())
         receive_task = asyncio.create_task(self.receive_samples())
-        results = await asyncio.gather(record_task, receive_task, publisher.server_task)
+        results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
         return results[0]
