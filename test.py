@@ -106,17 +106,21 @@ def main():
     # TODO: Fix these
     sample_rate = float(config['Processing']['SAMPLE_RATE'])
     center_freq = config['Server']['CENTER_FREQ']
-    channel_width = 1e5
+    # channel_width = 1e5
     channel_width = int(sample_rate // 20)
-    freq_offsets = [i * channel_width for i in range(20)]
+    print(f"Channel width: {channel_width}")
+    print(f"Center freq: {center_freq}")
+    freq_offsets = [i * channel_width + channel_width // 2 for i in range(19)]
     mid_offset = (len(freq_offsets) - 1) // 2 * channel_width
     centered_freq_offsets = [f - mid_offset for f in freq_offsets]
     args_list = [(i, f) for i, f in enumerate(freq_offsets)]
+
 
     with Pool(processes=len(args_list)) as pool:
         results = pool.map(run_recorder_instance, args_list)
 
     for index, result in enumerate(results):
+        print(f"freq offset: {centered_freq_offsets[index] + int(center_freq)}")
         analyze_audio(result, sample_rate=16000)
         # feature, names = extract_features(result, sample_rate=16000)
         # is_speech = is_speech_from_features(feature)
