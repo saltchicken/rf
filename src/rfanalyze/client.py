@@ -3,7 +3,7 @@ import struct
 import numpy as np
 import zmq
 import zmq.asyncio
-from scipy.signal import decimate, firwin, lfilter, resample_poly
+from scipy.signal import decimate, firwin, lfilter, resample_poly, windows
 from scipy.io.wavfile import write
 import time
 
@@ -223,7 +223,13 @@ class ReaderFFT(Reader):
         total_samples = []
         samples_recorded = 0
         # TODO: Calculate the actual frequencies
-        freqs = np.linspace(0, 24000, 1024, dtype=np.float32)
+        # N = len(samples)  # FFT size
+        N = 1024
+
+        freqs = np.fft.fftshift(np.fft.fftfreq(N, 1/self.sample_rate)).astype(np.float32)
+        # print(freqs)
+        # # freqs = np.linspace(10000, 54000, 1024, dtype=np.float32)
+        # print(freqs)
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
             # print(f"Received buffer length: {len(samples)}")
@@ -237,6 +243,7 @@ class ReaderFFT(Reader):
                 samples = np.concatenate(total_samples, axis=0)
                 print(f"Received buffer length: {len(samples)}")
                 total_samples = []
+
                 fft_result = np.fft.fftshift(np.fft.fft(samples, n=1024))
                 mags = 20 * np.log10(np.abs(fft_result) + 1e-12)
 
