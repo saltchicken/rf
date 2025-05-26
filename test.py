@@ -13,8 +13,10 @@ def downsample_audio(audio_int16, orig_sr=48000, target_sr=16000):
 
 def extract_features(audio_int16, sample_rate=16000):
     # Convert to float32 in [-1, 1]
-    downsampled = downsample_audio(audio_int16, orig_sr=48000, target_sr=16000)
-    audio_float = downsampled.astype(np.float32) / 32768.0
+    # downsampled = downsample_audio(audio_int16, orig_sr=48000, target_sr=16000)
+    # audio_float = downsampled.astype(np.float32) / 32768.0
+    #
+    audio_float = audio_int16.astype(np.float32) / 32768.0
 
     win_size = int(0.050 * sample_rate)  # 50 ms
     step_size = int(0.025 * sample_rate)  # 25 ms
