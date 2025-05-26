@@ -39,9 +39,10 @@ def analyze_audio(audio_int16, sample_rate=16000):
     audio_float = audio_int16.astype(np.float32) / 32768.0
     scores, embeddings, spectrogram = yamnet(audio_float)
 
-    import urllib.request
-    class_map_path = 'https://raw.githubusercontent.com/tensorflow/models/master/research/audioset/yamnet/yamnet_class_map.csv'
-    class_map = urllib.request.urlopen(class_map_path).read().decode('utf-8').splitlines()
+    with open('yamnet/assets/yamnet_class_map.csv', 'r', encoding='utf-8') as f:
+        class_map = f.read().splitlines()
+
+# Skip the header and extract the third column (display_name)
     class_names = [line.split(',')[2] for line in class_map[1:]]
 
     mean_scores = tf.reduce_mean(scores, axis=0)
