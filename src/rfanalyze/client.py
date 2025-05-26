@@ -218,20 +218,16 @@ class ReaderListener(Reader):
 class ReaderFFT(Reader):
     def __init__(self, args):
         super().__init__(args)
+        self.fft_size = 1024
+
 
     async def analyze_sample(self, publisher):
         total_samples = []
         samples_recorded = 0
-        # N = len(samples)  # FFT size
-        N = 1024
 
-        freqs = np.fft.fftshift(np.fft.fftfreq(N, 1/self.sample_rate)).astype(np.float32)
-        # print(freqs)
-        # # freqs = np.linspace(10000, 54000, 1024, dtype=np.float32)
-        # print(freqs)
+        freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
-            # print(f"Received buffer length: {len(samples)}")
             samples_recorded += 1
             total_samples.append(samples)
             self.sample_queue.task_done()
@@ -240,7 +236,6 @@ class ReaderFFT(Reader):
                 samples_recorded = 0
 
                 samples = np.concatenate(total_samples, axis=0)
-                # print(f"Received buffer length: {len(samples)}")
                 total_samples = []
 
                 fft_result = np.fft.fftshift(np.fft.fft(samples, n=1024))
