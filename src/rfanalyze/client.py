@@ -102,14 +102,14 @@ class ReaderRecorder(Reader):
         filtered_samples = lfilter(fir_coeff, 1.0, shifted_samples)
         fm_demod = fm_demodulate(filtered_samples)
 
-        decimation_factor = int(self.sample_rate / 48000)
+        decimation_factor = int(self.sample_rate / 16000)
         audio = resample_poly(fm_demod, up=1, down=decimation_factor)
 
         audio /= np.max(np.abs(audio))
         audio_int16 = np.int16(audio * 32767)
 
         if self.output_filename is not None:
-            write(self.output_filename, 48000, audio_int16)
+            write(self.output_filename, 16000, audio_int16)
             print(f"Saved FM audio to {self.output_filename}")
 
         return audio_int16
