@@ -269,12 +269,8 @@ class ReaderFFT(Reader):
                 fft = FFT(samples, self.sample_rate, freqs)
                 fft.apply_gaussian_filter(2)
 
-
                 data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
-
-
-        return magnitude
 
     async def run(self):
         record_task = asyncio.create_task(self.analyze_sample())
