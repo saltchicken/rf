@@ -241,7 +241,7 @@ class ReaderFFT(Reader):
                 samples_recorded = 0
 
                 samples = np.concatenate(total_samples, axis=0)
-                print(f"Received buffer length: {len(samples)}")
+                # print(f"Received buffer length: {len(samples)}")
                 total_samples = []
 
                 fft_result = np.fft.fftshift(np.fft.fft(samples, n=1024))
