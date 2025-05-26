@@ -114,8 +114,8 @@ def main():
     freq_offsets = [(i * channel_width) - (channel_width // 2) for i in range(20)]
     mid_offset = (len(freq_offsets) - 1) // 2 * channel_width
     centered_freq_offsets = [f - mid_offset for f in freq_offsets]
-    print(f"Centered freq offsets: {centered_freq_offsets}")
-    args_list = [(i, f) for i, f in enumerate(freq_offsets)]
+    print(f"Centered Freq offsets: {centered_freq_offsets}")
+    args_list = [(i, f) for i, f in enumerate(centered_freq_offsets)]
 
 
     with Pool(processes=len(args_list)) as pool:
