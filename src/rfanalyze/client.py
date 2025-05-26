@@ -221,10 +221,24 @@ class Signal:
         self.samples = samples
         self.sample_rate = sample_rate
 
-    def fft(self, fft_size):
-        fft_result = np.fft.fftshift(np.fft.fft(self.samples, n=fft_size))
+class FFT:
+    def __init__(self, samples, sample_rate, freqs=None):
+        self.samples = samples
+        self.sample_rate = sample_rate
+        self.fft_size = 1024
+
+        if freqs is None:
+            freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
+        self.freqs = freqs
+        self.magnitude = self.fft()
+
+    def fft(self):
+        fft_result = np.fft.fftshift(np.fft.fft(self.samples, n=self.fft_size))
         magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
         return magnitude
+
+    def apply_gaussian_filter(self, sigma):
+        self.magnitude = gaussian_filter1d(self.magnitude, sigma=sigma)
 
 class ReaderFFT(Reader):
     def __init__(self, args):
@@ -252,11 +266,11 @@ class ReaderFFT(Reader):
                 total_samples = []
 
                 signal = Signal(samples, self.sample_rate)
-                magnitude = signal.fft(self.fft_size)
+                fft = FFT(samples, self.sample_rate, freqs)
+                fft.apply_gaussian_filter(2)
 
-                magnitude = gaussian_filter1d(magnitude, sigma=2)
 
-                data = np.concatenate((freqs, magnitude)).tobytes()
+                data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
 
 
