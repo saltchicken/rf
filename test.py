@@ -6,6 +6,14 @@ from scipy.signal import resample
 
 from pyAudioAnalysis import ShortTermFeatures
 
+import tensorflow as tf
+import tensorflow_hub as hub
+
+import pandas as pd
+
+yamnet_model_handle = "yamnet"
+yamnet = hub.load(yamnet_model_handle)
+
 def downsample_audio(audio_int16, orig_sr=48000, target_sr=16000):
     n_samples = int(len(audio_int16) * target_sr / orig_sr)
     audio_resampled = resample(audio_int16, n_samples).astype(np.int16)
@@ -26,6 +34,24 @@ def extract_features(audio_int16, sample_rate=16000):
     )
 
     return features, feature_names
+
+def analyze_audio(audio_int16, sample_rate=16000):
+    audio_float = audio_int16.astype(np.float32) / 32768.0
+    scores, embeddings, spectrogram = yamnet(audio_float)
+
+    import urllib.request
+    class_map_path = 'https://raw.githubusercontent.com/tensorflow/models/master/research/audioset/yamnet/yamnet_class_map.csv'
+    class_map = urllib.request.urlopen(class_map_path).read().decode('utf-8').splitlines()
+    class_names = [line.split(',')[2] for line in class_map[1:]]
+
+    mean_scores = tf.reduce_mean(scores, axis=0)
+    top_class = tf.argmax(mean_scores)
+    top_score = mean_scores[top_class].numpy()
+    top_label = class_names[top_class.numpy()]
+
+    print(f"Top class: {top_label} (score: {top_score:.3f})")   
+
+
 
 
 def is_speech_from_features(features):
@@ -70,9 +96,10 @@ def main():
         results = pool.map(run_recorder_instance, args_list)
 
     for index, result in enumerate(results):
-        feature, names = extract_features(result, sample_rate=16000)
-        is_speech = is_speech_from_features(feature)
-        print(is_speech)
+        analyze_audio(result, sample_rate=16000)
+        # feature, names = extract_features(result, sample_rate=16000)
+        # is_speech = is_speech_from_features(feature)
+        # print(is_speech)
 
         # mean_features = np.mean(feature, axis=1)
         # for name, value in zip(names, mean_features):
