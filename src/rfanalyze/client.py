@@ -222,7 +222,6 @@ class ReaderFFT(Reader):
     async def analyze_sample(self, publisher):
         total_samples = []
         samples_recorded = 0
-        # TODO: Calculate the actual frequencies
         # N = len(samples)  # FFT size
         N = 1024
 
