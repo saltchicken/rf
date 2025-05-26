@@ -215,6 +215,16 @@ class ReaderListener(Reader):
             self.stop_event.set()
             self.audio_queue_stop_event.set()
 
+class Signal:
+    def __init__(self, samples, sample_rate):
+        self.samples = samples
+        self.sample_rate = sample_rate
+
+    def fft(self, fft_size):
+        fft_result = np.fft.fftshift(np.fft.fft(self.samples, n=fft_size))
+        magnitude = 20 * np.log10(np.abs(fft_result) + 1e-12)
+        return magnitude
+
 class ReaderFFT(Reader):
     def __init__(self, args):
         super().__init__(args)
@@ -238,10 +248,10 @@ class ReaderFFT(Reader):
                 samples = np.concatenate(total_samples, axis=0)
                 total_samples = []
 
-                fft_result = np.fft.fftshift(np.fft.fft(samples, n=1024))
-                mags = 20 * np.log10(np.abs(fft_result) + 1e-12)
+                signal = Signal(samples, self.sample_rate)
+                magnitude = signal.fft(self.fft_size)
 
-                data = np.concatenate((freqs, mags)).tobytes()
+                data = np.concatenate((freqs, magnitude)).tobytes()
                 publisher.send(data)
 
 
