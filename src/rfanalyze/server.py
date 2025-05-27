@@ -117,7 +117,7 @@ class Receiver:
 
                 if "settings" in message:
                     await self.rep_socket.send_json(self.get_current_settings())
-                    return
+                    continue
 
                 if "gain" in message:
                     self.gain = float(message["gain"])
