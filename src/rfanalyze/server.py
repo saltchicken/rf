@@ -104,7 +104,7 @@ class Receiver:
                 except Exception as e:
                     print(f"Error during stream processing: {e}")
         except asyncio.CancelledError:
-            print("Server shutdown requested (Ctrl+C)")
+            print("Stream Samples: Server shutdown requested (Ctrl+C)")
             self.stop_event.set()
         finally:
             await asyncio.sleep(1)
@@ -133,6 +133,10 @@ class Receiver:
 
                 response = {"status": "ok"}
                 await self.rep_socket.send_json(response)
+
+            except asyncio.CancelledError:
+                print("Control Listener: Server shutdown requested (Ctrl+C)")
+                self.stop_event.set()
 
             except Exception as e:
                 print(f"Control listener error: {e}")
