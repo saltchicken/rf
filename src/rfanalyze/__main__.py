@@ -62,6 +62,9 @@ async def run():
 
     if args.command == 'record':
         reader_recorder = ReaderRecorder(args)
+        # await reader_recorder.set_setting('gain', 30)
+        # settings = await reader_recorder.get_current_settings()
+        # print(settings)
         await reader_recorder.run()
     elif args.command == 'listen':
         reader_listener = ReaderListener(args)
