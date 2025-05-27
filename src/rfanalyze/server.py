@@ -138,8 +138,7 @@ class Receiver:
                 print(f"Control listener error: {e}")
                 await self.rep_socket.send_json({"status": "error", "message": str(e)})
 
-            finally:
-                print("Control listener stopped.")
+        print("Control listener stopped.")
 
 
 async def run():
