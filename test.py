@@ -92,7 +92,8 @@ def run_recorder_instance(index_freq):
         args = get_args('record')
         args.index = index
         args.freq_offset = freq_offset
-        args.output_filename = f'output_{index:03d}.wav'
+        # args.output_filename = f'output_{index:03d}.wav'
+        args.output_filename = f'output_{freq_offset}.wav'
 
         reader_recorder = ReaderRecorder(args)
         return await reader_recorder.run()

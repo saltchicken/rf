@@ -128,6 +128,7 @@ class ReaderListener(Reader):
             try:
                 audio_chunk = audio_queue.get_nowait()
             except queue.Empty:
+                print("Audio queue empty, inserting silence")
                 audio_chunk = b'\x00' * frame_count * 2
             return (audio_chunk, pyaudio.paContinue)
 
@@ -157,7 +158,6 @@ class ReaderListener(Reader):
             audio_buffer = np.array([], dtype=np.int16)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
-                print(len(samples))
                 self.sample_queue.task_done()
 
                 # Frequency shift
