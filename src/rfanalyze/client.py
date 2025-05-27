@@ -299,3 +299,40 @@ class ReaderFFT(Reader):
         receive_task = asyncio.create_task(self.receive_samples())
         results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
         return results[0]
+
+class ReaderConstellation(Reader):
+    def __init__(self, args):
+        super().__init__(args)
+        self.publisher = wavescope.Publisher()
+        self.constellation_size = 1024  # Number of I/Q points to send at once
+
+    async def analyze_sample(self):
+        iq_samples = []
+
+        while not self.stop_event.is_set():
+            samples = await self.sample_queue.get()
+            self.sample_queue.task_done()
+
+            iq_samples.append(samples)
+
+            if len(iq_samples) >= 8:
+                samples = np.concatenate(iq_samples, axis=0)
+                iq_samples = []
+
+                # Normalize or decimate if needed
+                if len(samples) > self.constellation_size:
+                    step = len(samples) // self.constellation_size
+                    samples = samples[::step]
+
+                # Prepare IQ data for publishing
+                iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
+                data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
+
+                self.publisher.publisher.send(data)
+
+    async def run(self):
+        record_task = asyncio.create_task(self.analyze_sample())
+        receive_task = asyncio.create_task(self.receive_samples())
+        results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
+        return results[0]
+

@@ -2,7 +2,7 @@ import argparse
 import configparser
 import asyncio
 
-from .client import ReaderListener, ReaderRecorder, ReaderFFT
+from .client import ReaderListener, ReaderRecorder, ReaderFFT, ReaderConstellation
 from .fft import RealTimeFFTVisualizer
 
 from pathlib import Path
@@ -47,6 +47,9 @@ def get_args(command=None):
     fft_parser.add_argument('--chunks_per_frame', type=int, default=config['FFT']['CHUNKS_PER_FRAME'], help='Chunks to accumalate per FFT calculation')
     fft_parser.add_argument('--decimation_factor', type=int, default=config['FFT']['DECIMATION_FACTOR'], help='Decimation factor for FFT calculation')
 
+    constellation_parser = subparsers.add_parser('constellation', parents=[parent_parser], help='Constellation visualization')
+
+
     edit_parser = subparsers.add_parser('edit', help='Edit config file')
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
@@ -73,6 +76,9 @@ async def run():
         # fft_visualizer.run()
     elif args.command == 'edit':
         open_config_file()
+    elif args.command == 'constellation':
+        reader_constellation = ReaderConstellation(args)
+        await reader_constellation.run()
     else:
         raise ValueError(f"Unknown command: {args.command}")
 
