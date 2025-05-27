@@ -93,9 +93,12 @@ def run_recorder_instance(index_freq):
         args.index = index
         args.freq_offset = freq_offset
         # args.output_filename = f'output_{index:03d}.wav'
-        args.output_filename = f'output_{freq_offset}.wav'
 
         reader_recorder = ReaderRecorder(args)
+        settings = await reader_recorder.get_current_settings()
+        frequency = int(settings['center_freq']) + int(freq_offset)
+        reader_recorder.output_filename = f'output_{str(frequency)}.wav'
+
         return await reader_recorder.run()
 
     return asyncio.run(runner())

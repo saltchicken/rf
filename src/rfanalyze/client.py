@@ -34,6 +34,10 @@ class Reader:
 
         self.ctx = zmq.asyncio.Context()
 
+        self.req_socket = self.ctx.socket(zmq.REQ)
+        # TODO: Figure out how to set port better
+        self.req_socket.connect(f"tcp://{self.host}:5001")
+
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
         socket.connect(f"tcp://{self.host}:{self.port}")
@@ -65,8 +69,18 @@ class Reader:
             print("Cancelled receive_samples.")
         finally:
             print("Receiver shutting down.")
-            self.stop_event.set()
             socket.close()
+            self.close()
+
+    def close(self):
+        self.stop_event.set()
+        self.req_socket.close(linger=0)
+        self.ctx.term()
+
+    def get_current_settings(self):
+        self.req_socket.send_json({"settings": True})
+        response = self.req_socket.recv_json()
+        return response
 
 class ReaderRecorder(Reader):
     def __init__(self, args):
