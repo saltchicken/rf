@@ -246,6 +246,11 @@ class FFT:
     def apply_smooth_moving_average(self, window_size):
         kernel = np.ones(window_size) / window_size
         self.magnitude = np.convolve(self.magnitude, kernel, mode='same').astype(np.float32)
+
+    def apply_exponential_moving_average(self, previous_magnitude, alpha=0.3):
+            if previous_magnitude is None:
+                return self.magnitude
+            return alpha * self.magnitude + (1 - alpha) * previous_magnitude
     
 
 class ReaderFFT(Reader):
@@ -255,10 +260,13 @@ class ReaderFFT(Reader):
 
         self.publisher = wavescope.Publisher()
 
+        self.previous_magnitude = None
+        self.ema_alpha = 0.3
 
     async def analyze_sample(self):
         total_samples = []
         samples_recorded = 0
+
 
         freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
         while not self.stop_event.is_set():
@@ -275,9 +283,15 @@ class ReaderFFT(Reader):
 
                 signal = Signal(samples, self.sample_rate)
                 fft = FFT(samples, self.sample_rate, freqs)
-                # fft.apply_gaussian_filter(2)
-                # fft.apply_median_filter(5)
-                fft.apply_smooth_moving_average(25)
+                fft.apply_gaussian_filter(2)
+                fft.apply_median_filter(5)
+                fft.apply_smooth_moving_average(5)
+
+                smoothed = fft.apply_exponential_moving_average(self.previous_magnitude, self.ema_alpha)
+                self.previous_magnitude = smoothed
+                fft.magnitude = smoothed
+
+
 
                 data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
