@@ -20,15 +20,22 @@ class Receiver:
 
         self.sdr = None
         self.rxStream = None
-        # self.setup_sdr(args.driver)
         self.setup_sdr()
 
         self.stop_event = asyncio.Event()
 
         self.ctx = zmq.asyncio.Context()
+
+        # PUB socket for streaming samples
         self.pub_socket = self.ctx.socket(zmq.PUB)
         self.pub_socket.bind(f"tcp://0.0.0.0:{self.port}")
         print(f"ZeroMQ PUB server broadcasting on port {self.port}")
+
+        # REP socket for config control
+        self.rep_port = self.port + 1
+        self.rep_socket = self.ctx.socket(zmq.REP)
+        self.rep_socket.bind(f"tcp://0.0.0.0:{self.rep_port}")
+        print(f"ZeroMQ REP server listening on port {self.rep_port}")
 
     def setup_sdr(self, driver=None):
         if driver:
@@ -38,11 +45,11 @@ class Receiver:
             results = SoapySDR.Device.enumerate()
             if not results:
                 raise RuntimeError("No SDR devices found.")
-
             args = results[0]
+
         self.sdr = SoapySDR.Device(args)
 
-        # sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW")
+        # self.sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW") # Needed for LimeSDR
         self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
         self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
         # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
@@ -50,21 +57,22 @@ class Receiver:
         self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
 
     def close(self):
-            print("Receiver cleanup started.")
-            try:
-                if self.sdr:
-                    try:
-                        if self.rxStream is not None:
-                            self.sdr.deactivateStream(self.rxStream)
-                            self.sdr.closeStream(self.rxStream)
-                            self.rxStream = None
-                    except Exception as e:
-                        print(f"Error closing SDR stream: {e}")
-            finally:
-                self.sdr = None
-                self.pub_socket.close(linger=0)
-                self.ctx.term()
-                print("Receiver cleanup finished.")
+        print("Receiver cleanup started.")
+        try:
+            if self.sdr:
+                try:
+                    if self.rxStream is not None:
+                        self.sdr.deactivateStream(self.rxStream)
+                        self.sdr.closeStream(self.rxStream)
+                        self.rxStream = None
+                except Exception as e:
+                    print(f"Error closing SDR stream: {e}")
+        finally:
+            self.sdr = None
+            self.pub_socket.close(linger=0)
+            self.rep_socket.close(linger=0)
+            self.ctx.term()
+            print("Receiver cleanup finished.")
 
     async def stream_samples(self):
         self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
@@ -81,7 +89,6 @@ class Receiver:
                         if len(sample_bytes) != self.buffer_size * 8:
                             print(f"Short read: {len(sample_bytes)} bytes. Breaking")
                             break
-                        # Send topic + message
                         topic = b"samples"
                         length = struct.pack('!I', len(sample_bytes))
                         await self.pub_socket.send_multipart([topic, length, sample_bytes])
@@ -89,13 +96,36 @@ class Receiver:
                         await asyncio.sleep(0.01)
                 except Exception as e:
                     print(f"Error during stream processing: {e}")
-
         except asyncio.CancelledError:
             print("Server shutdown requested (Ctrl+C)")
             self.stop_event.set()
         finally:
             await asyncio.sleep(1)
             self.close()
+
+    async def control_listener(self):
+        while not self.stop_event.is_set():
+            try:
+                message = await self.rep_socket.recv_json()
+                response = {"status": "ok"}
+
+                if "gain" in message:
+                    self.gain = float(message["gain"])
+                    self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
+
+                if "center_freq" in message:
+                    self.center_freq = float(message["center_freq"])
+                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+
+                if "sample_rate" in message:
+                    self.sample_rate = float(message["sample_rate"])
+                    self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+
+                await self.rep_socket.send_json(response)
+
+            except Exception as e:
+                print(f"Control listener error: {e}")
+                await self.rep_socket.send_json({"status": "error", "message": str(e)})
 
 async def run():
     config = configparser.ConfigParser()
@@ -114,7 +144,10 @@ async def run():
     args = parser.parse_args()
 
     receiver = Receiver(args)
-    await receiver.stream_samples()
+    await asyncio.gather(
+        receiver.stream_samples(),
+        receiver.control_listener()
+    )
 
 def main():
     asyncio.run(run())
