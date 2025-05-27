@@ -127,6 +127,10 @@ class Receiver:
                 print(f"Control listener error: {e}")
                 await self.rep_socket.send_json({"status": "error", "message": str(e)})
 
+            finally:
+                print("Control listener stopped.")
+
+
 async def run():
     config = configparser.ConfigParser()
     config.read(f'{config_dir}/config.ini')
