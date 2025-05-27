@@ -4,7 +4,6 @@ import numpy as np
 import zmq
 import zmq.asyncio
 from scipy.signal import decimate, resample_poly, resample
-from scipy.io.wavfile import write
 import time
 
 import multiprocessing
@@ -14,12 +13,9 @@ import queue
 import pyaudio
 import wavescope
 
-from .classes import Signal, FFT
+from .classes import Signal, FFT, FM
 
 
-def fm_demodulate(iq):
-    angle = np.angle(iq[1:] * np.conj(iq[:-1]))
-    return angle
 
 def complex_from_bytes(data):
     samples = np.frombuffer(data, dtype=np.float32)
@@ -98,19 +94,16 @@ class ReaderRecorder(Reader):
         signal.apply_freq_offset(self.freq_offset)
         signal.apply_low_pass_filter(100e3)
 
-        fm_demod = fm_demodulate(signal.samples)
-
-        decimation_factor = int(self.sample_rate / 16000)
-        audio = resample_poly(fm_demod, up=1, down=decimation_factor)
-
-        audio /= np.max(np.abs(audio))
-        audio_int16 = np.int16(audio * 32767)
+        fm = FM(signal.samples, self.sample_rate)
+        fm.apply_fm_demodulation()
+        fm.apply_resample(16000) # This is now audio
+        fm.apply_normalization()
+        fm.convert_to_int16()
 
         if self.output_filename is not None:
-            write(self.output_filename, 16000, audio_int16)
-            print(f"Saved FM audio to {self.output_filename}")
+            fm.save(self.output_filename)
 
-        return audio_int16
+        return fm.samples
 
     async def run(self):
         record_task = asyncio.create_task(self.record_sample())
@@ -121,6 +114,8 @@ class ReaderRecorder(Reader):
 class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
+        self.audio_sample_rate = 16000
+        self.audio_frames_per_buffer = 1024
         self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
         self.audio_proc = Process(target=self.audio_process_worker, args=(self.audio_queue, self.audio_queue_stop_event))
@@ -139,10 +134,10 @@ class ReaderListener(Reader):
         p = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16,
                         channels=1,
-                        rate=48000,
+                        rate=self.audio_sample_rate,
                         output=True,
                         stream_callback=callback,
-                        frames_per_buffer=1024
+                        frames_per_buffer=self.audio_frames_per_buffer
                         )
         stream.start_stream()
         try:
@@ -159,49 +154,30 @@ class ReaderListener(Reader):
 
     async def listen_sample(self):
         try:
-            final = np.array([], dtype=np.int16)
+            audio_buffer = np.array([], dtype=np.int16)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
+                print(len(samples))
                 self.sample_queue.task_done()
 
                 # Frequency shift
-                t = np.arange(len(samples)) / self.sample_rate
-                shifted_samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
+                signal = Signal(samples, self.sample_rate)
+                signal.apply_freq_offset(self.freq_offset)
+                signal.apply_low_pass_filter(100e3)
+                fm = FM(signal.samples, self.sample_rate)
+                fm.apply_fm_demodulation()
+                fm.apply_resample(self.audio_sample_rate)
+                fm.apply_normalization()
+                fm.apply_volume(0.25)
+                fm.convert_to_int16()
 
-                # FIR low-pass filter
-                cutoff_hz = 100e3
-                nyquist_rate = self.sample_rate / 2
-                num_taps = 101
-                fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
-
-                filtered_samples = lfilter(fir_coeff, 1.0, shifted_samples)
-
-                # FM demodulation
-                fm_demod = fm_demodulate(filtered_samples)
-
-                # Decimate to ~48kHz
-                decimation_factor = int(self.sample_rate / 48000)
-                audio = resample_poly(fm_demod, up=1, down=decimation_factor)
-
-                # Normalize and convert to int16
-                # audio /= np.max(np.abs(audio) + 1e-9)  # prevent division by zero
-                max_val = np.max(np.abs(audio))
-                if max_val < 1e-9:
-                    max_val = 1e-9
-                audio /= max_val
-                volume = 0.25  # 25% volume
-                audio *= volume
-                audio_int16 = np.int16(audio * 32767)
-
-
-                final = np.concatenate((final, audio_int16))
-
+                audio_buffer = np.concatenate((audio_buffer, fm.samples))
 
                 # Stream to audio output
-                if len(final) >= 1024:
+                if len(audio_buffer) >= self.audio_frames_per_buffer:
                     try:
-                        self.audio_queue.put_nowait(final[:1024])
-                        final = final[1024:]
+                        self.audio_queue.put_nowait(audio_buffer[:self.audio_frames_per_buffer])
+                        audio_buffer = audio_buffer[self.audio_frames_per_buffer:]
                     except queue.Full:
                         print("Audio Queue full. Dropping frame.")
         except asyncio.CancelledError:
@@ -211,17 +187,6 @@ class ReaderListener(Reader):
         finally:
             self.stop_event.set()
             self.audio_queue_stop_event.set()
-
-
-def fm_demodulate(iq_samples):
-    # Instantaneous phase difference (FM demodulation)
-    return np.angle(iq_samples[1:] * np.conj(iq_samples[:-1]))
-
-# def frequency_shift(samples, f_offset, sample_rate):
-#     n = np.arange(len(samples))
-#     shift_signal = np.exp(1j * 2 * np.pi * f_offset * n / sample_rate)
-#     shifted_samples = samples * shift_signal
-#     return shifted_samples
 
 class ReaderFFT(Reader):
     def __init__(self, args):

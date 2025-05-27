@@ -1,11 +1,21 @@
 import numpy as np
-from scipy.signal import firwin, lfilter, medfilt
+from scipy.signal import firwin, lfilter, medfilt, resample_poly
 from scipy.ndimage import gaussian_filter1d
+from scipy.io.wavfile import write
 
-class Signal:
+class Sample:
     def __init__(self, samples, sample_rate):
         self.samples = samples
         self.sample_rate = sample_rate
+
+    def apply_resample(self, down_sample_rate):
+        decimation_factor = int(self.sample_rate / down_sample_rate)
+        self.samples = resample_poly(self.samples, up=1, down=decimation_factor)
+        self.sample_rate = down_sample_rate
+
+class Signal(Sample):
+    def __init__(self, samples, sample_rate):
+        super().__init__(samples, sample_rate)
 
     def apply_freq_offset(self, freq_offset):
         t = np.arange(len(self.samples)) / self.sample_rate
@@ -17,10 +27,9 @@ class Signal:
         fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
         self.samples = lfilter(fir_coeff, 1.0, self.samples)
 
-class FFT:
+class FFT(Sample):
     def __init__(self, samples, sample_rate, freqs=None):
-        self.samples = samples
-        self.sample_rate = sample_rate
+        super().__init__(samples, sample_rate)
         self.fft_size = 1024
 
         if freqs is None:
@@ -47,3 +56,31 @@ class FFT:
             if previous_magnitude is None:
                 return self.magnitude
             return alpha * self.magnitude + (1 - alpha) * previous_magnitude
+
+class FM(Sample):
+    def __init__(self, samples, sample_rate):
+        super().__init__(samples, sample_rate)
+
+    # def apply_fm_demodulation(self, frequency_deviation):
+    #     t = np.arange(len(self.samples)) / self.sample_rate
+    #     fm_signal = np.cos(2 * np.pi * frequency_deviation * t)
+    #     demodulated_signal = self.samples * fm_signal
+    #     self.samples = demodulated_signal
+    # def fm_demodulate(iq):
+    #     angle = np.angle(iq[1:] * np.conj(iq[:-1]))
+    #     return angle
+    def apply_fm_demodulation(self):
+        self.samples = np.angle(self.samples[1:] * np.conj(self.samples[:-1]))
+
+    def apply_normalization(self):
+        self.samples /= np.max(np.abs(self.samples))
+
+    def convert_to_int16(self):
+        self.samples = np.int16(self.samples * 32767)
+
+    def apply_volume(self, volume):
+        self.samples *= volume
+
+    def save(self, output_filename):
+        write(output_filename, int(self.sample_rate), self.samples)
+        print(f"Signal saved to {output_filename} - Sample Rate: {self.sample_rate} Hz")
