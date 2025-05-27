@@ -3,7 +3,6 @@ import configparser
 import asyncio
 
 from .client import ReaderListener, ReaderRecorder, ReaderFFT, ReaderConstellation
-from .fft import RealTimeFFTVisualizer
 
 from pathlib import Path
 config_dir = f'{Path(__file__).parent}/config'
@@ -72,8 +71,6 @@ async def run():
     elif args.command == 'fft':
         reader_fft = ReaderFFT(args)
         await reader_fft.run()
-        # fft_visualizer = RealTimeFFTVisualizer(args)
-        # fft_visualizer.run()
     elif args.command == 'edit':
         open_config_file()
     elif args.command == 'constellation':
