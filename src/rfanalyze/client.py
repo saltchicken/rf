@@ -82,6 +82,14 @@ class Reader:
         response = self.req_socket.recv_json()
         return response
 
+    def set_setting(self, setting, value):
+        self.req_socket.send_json({setting: value})
+        response = self.req_socket.recv_json()
+        return response
+
+
+
+
 class ReaderRecorder(Reader):
     def __init__(self, args):
         super().__init__(args)
