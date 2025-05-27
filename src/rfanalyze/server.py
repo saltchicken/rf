@@ -162,10 +162,15 @@ async def run():
     args = parser.parse_args()
 
     receiver = Receiver(args)
-    await asyncio.gather(
-        receiver.stream_samples(),
-        receiver.control_listener()
-    )
+    try:
+        await asyncio.gather(
+            receiver.stream_samples(),
+            receiver.control_listener()
+        )
+    except asyncio.CancelledError:
+        print("Server shutdown requested (Ctrl+C)")
+    finally:
+        await receiver.close()
 
 def main():
     asyncio.run(run())
