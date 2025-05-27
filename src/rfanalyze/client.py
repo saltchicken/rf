@@ -3,7 +3,7 @@ import struct
 import numpy as np
 import zmq
 import zmq.asyncio
-from scipy.signal import decimate, firwin, lfilter, resample_poly, medfilt
+from scipy.signal import decimate, firwin, lfilter, resample_poly, medfilt, resample
 from scipy.io.wavfile import write
 from scipy.ndimage import gaussian_filter1d
 import time
@@ -300,11 +300,28 @@ class ReaderFFT(Reader):
         results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
         return results[0]
 
+def frequency_shift(samples, f_offset, sample_rate):
+    n = np.arange(len(samples))
+    shift_signal = np.exp(1j * 2 * np.pi * f_offset * n / sample_rate)
+    shifted_samples = samples * shift_signal
+    return shifted_samples
+
+
 class ReaderConstellation(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.publisher = wavescope.Publisher()
         self.constellation_size = 1024  # Number of I/Q points to send at once
+        self.freq_offset = args.freq_offset
+
+    # def fm_demodulate(self, samples: np.ndarray) -> np.ndarray:
+    #     # FM demodulation using phase difference of IQ samples
+    #     phase_diff = np.angle(samples[1:] * np.conj(samples[:-1]))
+    #
+    #     # Resample to 1024 samples
+    #     resampled_phase_diff = resample(phase_diff, 1024)
+    #
+    #     return resampled_phase_diff
 
     async def analyze_sample(self):
         iq_samples = []
@@ -317,16 +334,26 @@ class ReaderConstellation(Reader):
 
             if len(iq_samples) >= 8:
                 samples = np.concatenate(iq_samples, axis=0)
+
+                samples = frequency_shift(samples, self.freq_offset, self.sample_rate)
                 iq_samples = []
 
+                # Remove DC offset
+                samples -= np.mean(samples) 
+
+                # samples = self.fm_demodulate(samples)
                 # Normalize or decimate if needed
                 if len(samples) > self.constellation_size:
                     step = len(samples) // self.constellation_size
-                    samples = samples[::step]
+                    samples = resample_poly(samples, up=1, down=step)
 
                 # Prepare IQ data for publishing
-                iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
-                data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
+                # iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
+                # data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
+                #
+                i_part = samples.real.astype(np.float32)
+                q_part = samples.imag.astype(np.float32)
+                data = np.concatenate((i_part, q_part)).tobytes()
 
                 self.publisher.publisher.send(data)
 
