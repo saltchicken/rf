@@ -291,8 +291,6 @@ class ReaderFFT(Reader):
                 self.previous_magnitude = smoothed
                 fft.magnitude = smoothed
 
-
-
                 data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
 
