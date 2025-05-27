@@ -2,7 +2,7 @@ import argparse
 import configparser
 import asyncio
 
-from .client import ReaderListener, ReaderRecorder, ReaderFFT, ReaderConstellation
+from .client import Reader, ReaderListener, ReaderRecorder, ReaderFFT, ReaderConstellation
 
 from pathlib import Path
 config_dir = f'{Path(__file__).parent}/config'
@@ -52,6 +52,10 @@ def get_args(command=None):
     edit_parser = subparsers.add_parser('edit', help='Edit config file')
     # edit_parser.add_argument('file', type=str, help='Config file to edit')
 
+    command_parser = subparsers.add_parser('command', parents=[parent_parser], help='Send command to FM receiver')
+    command_parser.add_argument('setting', type=str, help='Setting to modify')
+    command_parser.add_argument('value', type=str, help='Value to set')
+
     if command:
         return parser.parse_args([command])
     else:
@@ -79,6 +83,10 @@ async def run():
     elif args.command == 'constellation':
         reader_constellation = ReaderConstellation(args)
         await reader_constellation.run()
+    elif args.command == 'command':
+        reader = Reader(args)
+        response = await reader.set_setting(args.setting, args.value)
+        print(response)
     else:
         raise ValueError(f"Unknown command: {args.command}")
 
