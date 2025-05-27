@@ -251,15 +251,24 @@ class FFT:
             if previous_magnitude is None:
                 return self.magnitude
             return alpha * self.magnitude + (1 - alpha) * previous_magnitude
-    
+
+def fm_demodulate(iq_samples):
+    # Instantaneous phase difference (FM demodulation)
+    return np.angle(iq_samples[1:] * np.conj(iq_samples[:-1]))
+
+# def frequency_shift(samples, f_offset, sample_rate):
+#     n = np.arange(len(samples))
+#     shift_signal = np.exp(1j * 2 * np.pi * f_offset * n / sample_rate)
+#     shifted_samples = samples * shift_signal
+#     return shifted_samples
 
 class ReaderFFT(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.fft_size = 1024
 
-        self.publisher = wavescope.Publisher()
 
+        self.publisher = wavescope.Publisher()
         self.previous_magnitude = None
         self.ema_alpha = 0.3
 
@@ -293,6 +302,45 @@ class ReaderFFT(Reader):
 
                 data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
+                #
+                # samples = frequency_shift(samples, 10000, self.sample_rate)
+                # Remove DC offset
+                # samples -= np.mean(samples) 
+
+
+
+                # cutoff_hz = 100e3
+                # nyquist_rate = self.sample_rate / 2
+                # num_taps = 101
+                # fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
+
+                # samples = lfilter(fir_coeff, 1.0, samples)
+
+
+
+                # audio = fm_demodulate(samples)
+                # audio = resample(audio, len(audio)//8)
+                # print(len(audio))
+
+                # if len(samples) > self.fft_size:
+                #     step = len(samples) // self.fft_size
+                #     samples = resample_poly(samples, up=1, down=step)
+
+                # if len(audio) > 1024 * 16:
+                #     step = len(audio) // 1024 * 16
+                #     print(step)
+                #     audio = resample_poly(audio, up=1, down=step)
+
+                # print(len(audio))
+
+                # freqs = np.linspace(-self.sample_rate/2, self.sample_rate/2, len(audio), endpoint=False).astype(np.float32)
+                # Create freqs a count from 0 to self.fft_size
+                # freqs = np.linspace(0, self.fft_size, len(audio), endpoint=False).astype(np.float32)
+                # audio_data = np.concatenate((freqs, audio))
+                # audio_data = audio.astype(np.float32)
+                # self.publisher.publisher.send(audio_data.tobytes())
+
+
 
     async def run(self):
         record_task = asyncio.create_task(self.analyze_sample())
@@ -300,11 +348,6 @@ class ReaderFFT(Reader):
         results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
         return results[0]
 
-def frequency_shift(samples, f_offset, sample_rate):
-    n = np.arange(len(samples))
-    shift_signal = np.exp(1j * 2 * np.pi * f_offset * n / sample_rate)
-    shifted_samples = samples * shift_signal
-    return shifted_samples
 
 
 class ReaderConstellation(Reader):
@@ -335,7 +378,11 @@ class ReaderConstellation(Reader):
             if len(iq_samples) >= 8:
                 samples = np.concatenate(iq_samples, axis=0)
 
-                samples = frequency_shift(samples, self.freq_offset, self.sample_rate)
+                # Frequency shift
+                t = np.arange(len(samples)) / self.sample_rate
+                samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
+
+                # samples = frequency_shift(samples, self.freq_offset, self.sample_rate)
                 iq_samples = []
 
                 # Remove DC offset
@@ -348,12 +395,12 @@ class ReaderConstellation(Reader):
                     samples = resample_poly(samples, up=1, down=step)
 
                 # Prepare IQ data for publishing
-                # iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
-                # data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
+                iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
+                data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
                 #
-                i_part = samples.real.astype(np.float32)
-                q_part = samples.imag.astype(np.float32)
-                data = np.concatenate((i_part, q_part)).tobytes()
+                # i_part = samples.real.astype(np.float32)
+                # q_part = samples.imag.astype(np.float32)
+                # data = np.concatenate((i_part, q_part)).tobytes()
 
                 self.publisher.publisher.send(data)
 
