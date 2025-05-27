@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rfanalyze = "rfanalyze.__main__:main"
+rf = "rfanalyze.__main__:main"
 rf_server = "rfanalyze.server:main"
 
 [tool.setuptools.packages.find]
