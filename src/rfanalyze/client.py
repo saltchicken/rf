@@ -345,8 +345,14 @@ class ReaderFFT(Reader):
     async def run(self):
         record_task = asyncio.create_task(self.analyze_sample())
         receive_task = asyncio.create_task(self.receive_samples())
-        results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
-        return results[0]
+        try:
+            results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
+            return results[0]
+        except asyncio.CancelledError:
+            print("Cancelled run.")
+        except Exception as e:
+            print(f"Error in run: {e}")
+
 
 
 
