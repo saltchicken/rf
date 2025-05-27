@@ -170,7 +170,7 @@ async def run():
     except asyncio.CancelledError:
         print("Server shutdown requested (Ctrl+C)")
     finally:
-        await receiver.close()
+        print("Do anything further if necessary")
 
 def main():
     asyncio.run(run())
