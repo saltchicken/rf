@@ -3,7 +3,7 @@ import struct
 import numpy as np
 import zmq
 import zmq.asyncio
-from scipy.signal import decimate, firwin, lfilter, resample_poly, windows
+from scipy.signal import decimate, firwin, lfilter, resample_poly, medfilt
 from scipy.io.wavfile import write
 from scipy.ndimage import gaussian_filter1d
 import time
@@ -240,6 +240,14 @@ class FFT:
     def apply_gaussian_filter(self, sigma):
         self.magnitude = gaussian_filter1d(self.magnitude, sigma=sigma)
 
+    def apply_median_filter(self, kernel_size):
+        self.magnitude = medfilt(self.magnitude, kernel_size=kernel_size)
+
+    def apply_smooth_moving_average(self, window_size):
+        kernel = np.ones(window_size) / window_size
+        self.magnitude = np.convolve(self.magnitude, kernel, mode='same').astype(np.float32)
+    
+
 class ReaderFFT(Reader):
     def __init__(self, args):
         super().__init__(args)
@@ -267,7 +275,9 @@ class ReaderFFT(Reader):
 
                 signal = Signal(samples, self.sample_rate)
                 fft = FFT(samples, self.sample_rate, freqs)
-                fft.apply_gaussian_filter(2)
+                # fft.apply_gaussian_filter(2)
+                # fft.apply_median_filter(5)
+                fft.apply_smooth_moving_average(25)
 
                 data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 self.publisher.publisher.send(data)
