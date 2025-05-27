@@ -37,6 +37,13 @@ class Receiver:
         self.rep_socket.bind(f"tcp://0.0.0.0:{self.rep_port}")
         print(f"ZeroMQ REP server listening on port {self.rep_port}")
 
+    def get_current_settings(self):
+        return {
+            "sample_rate": self.sample_rate,
+            "center_freq": self.center_freq,
+            "gain": self.gain
+        }
+
     def setup_sdr(self, driver=None):
         if driver:
             args = SoapySDR.SoapySDRKwargs()
@@ -107,7 +114,10 @@ class Receiver:
         while not self.stop_event.is_set():
             try:
                 message = await self.rep_socket.recv_json()
-                response = {"status": "ok"}
+
+                if "settings" in message:
+                    await self.rep_socket.send_json(self.get_current_settings())
+                    return
 
                 if "gain" in message:
                     self.gain = float(message["gain"])
@@ -121,6 +131,7 @@ class Receiver:
                     self.sample_rate = float(message["sample_rate"])
                     self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
 
+                response = {"status": "ok"}
                 await self.rep_socket.send_json(response)
 
             except Exception as e:
