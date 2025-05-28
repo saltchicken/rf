@@ -5,6 +5,7 @@ import zmq
 import zmq.asyncio
 from scipy.signal import decimate, resample_poly, resample
 import time
+import json
 
 import multiprocessing
 from multiprocessing import Process, Queue
@@ -226,6 +227,7 @@ class ReaderFFT(Reader):
 
 
         freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
+        self.publisher.data = freqs.tolist()
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
             samples_recorded += 1
