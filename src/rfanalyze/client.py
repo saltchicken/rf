@@ -256,7 +256,10 @@ class ReaderFFT(Reader):
 
                 # data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 data = fft.magnitude.tobytes()
-                self.publisher.queue.put_nowait(data)
+                try:
+                    self.publisher.queue.put_nowait(data)
+                except asyncio.QueueFull:
+                    print("Queue full. Dropping frame.")
 
 
     async def run(self):
