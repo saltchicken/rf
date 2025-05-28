@@ -256,7 +256,7 @@ class ReaderFFT(Reader):
 
                 # data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
                 data = fft.magnitude.tobytes()
-                self.publisher.publisher.send(data)
+                self.publisher.queue.put_nowait(data)
 
 
     async def run(self):
