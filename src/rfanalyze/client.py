@@ -226,8 +226,12 @@ class ReaderFFT(Reader):
         samples_recorded = 0
 
 
+        # TODO: Take a relook at this. Calling a whole request that may not be necessary and also may need to be updated later
+        settings = await self.get_current_settings()
         freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
+        freqs += float(settings["center_freq"])
         self.publisher.data = freqs.tolist()
+
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
             samples_recorded += 1
@@ -250,7 +254,8 @@ class ReaderFFT(Reader):
                 self.previous_magnitude = smoothed
                 fft.magnitude = smoothed
 
-                data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
+                # data = np.concatenate((fft.freqs, fft.magnitude)).tobytes()
+                data = fft.magnitude.tobytes()
                 self.publisher.publisher.send(data)
 
 
