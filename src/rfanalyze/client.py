@@ -12,7 +12,8 @@ from multiprocessing import Process, Queue
 import queue
 
 import pyaudio
-import wavescope
+
+from .bridge import Publisher
 
 from .classes import Signal, FFT, FM
 
@@ -217,7 +218,7 @@ class ReaderFFT(Reader):
         self.fft_size = 1024
 
 
-        self.publisher = wavescope.Publisher()
+        self.publisher = Publisher()
         self.previous_magnitude = None
         self.ema_alpha = 0.3
 
