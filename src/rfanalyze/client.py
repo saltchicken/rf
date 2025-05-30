@@ -217,8 +217,8 @@ class ReaderFFT(Reader):
         super().__init__(args)
         self.fft_size = 1024
 
-
-        self.publisher = Publisher()
+        self.publisher_port = args.publisher_port
+        self.publisher = Publisher(port = self.publisher_port)
         self.previous_magnitude = None
         self.ema_alpha = 0.3
 
@@ -280,7 +280,7 @@ class ReaderFFT(Reader):
 class ReaderConstellation(Reader):
     def __init__(self, args):
         super().__init__(args)
-        self.publisher = wavescope.Publisher()
+        self.publisher = Publisher()
         self.constellation_size = 1024  # Number of I/Q points to send at once
         self.freq_offset = args.freq_offset
 
