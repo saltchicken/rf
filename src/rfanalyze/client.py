@@ -224,6 +224,7 @@ class ReaderListener(Reader):
                     fm = FM(signal.samples, self.sample_rate)
                     fm.apply_fm_demodulation()
                     fm.apply_resample(self.audio_sample_rate)
+                    fm.apply_de_emphasis_filter()
                     fm.apply_normalization()
                     fm.apply_volume(0.25)
                     fm.convert_to_int16()
