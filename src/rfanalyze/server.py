@@ -8,7 +8,9 @@ import zmq
 import zmq.asyncio
 
 from pathlib import Path
-config_dir = f'{Path(__file__).parent}/config'
+
+config_dir = f"{Path(__file__).parent}/config"
+
 
 class Receiver:
     def __init__(self, args):
@@ -41,7 +43,7 @@ class Receiver:
         return {
             "sample_rate": self.sample_rate,
             "center_freq": self.center_freq,
-            "gain": self.gain
+            "gain": self.gain,
         }
 
     def setup_sdr(self, driver=None):
@@ -90,15 +92,23 @@ class Receiver:
             while not self.stop_event.is_set():
                 try:
                     buff = np.empty(self.buffer_size, np.complex64)
-                    sr = await loop.run_in_executor(None, self.sdr.readStream, self.rxStream, [buff], self.buffer_size)
+                    sr = await loop.run_in_executor(
+                        None,
+                        self.sdr.readStream,
+                        self.rxStream,
+                        [buff],
+                        self.buffer_size,
+                    )
                     if sr.ret > 0:
-                        sample_bytes = buff[:sr.ret].tobytes()
+                        sample_bytes = buff[: sr.ret].tobytes()
                         if len(sample_bytes) != self.buffer_size * 8:
                             print(f"Short read: {len(sample_bytes)} bytes. Breaking")
                             break
                         topic = b"samples"
-                        length = struct.pack('!I', len(sample_bytes))
-                        await self.pub_socket.send_multipart([topic, length, sample_bytes])
+                        length = struct.pack("!I", len(sample_bytes))
+                        await self.pub_socket.send_multipart(
+                            [topic, length, sample_bytes]
+                        )
                     else:
                         await asyncio.sleep(0.01)
                 except Exception as e:
@@ -125,6 +135,7 @@ class Receiver:
 
                 if "center_freq" in message:
                     self.center_freq = float(message["center_freq"])
+                    print(f"Setting center frequency to {self.center_freq}")
                     self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
 
                 if "sample_rate" in message:
@@ -147,33 +158,69 @@ class Receiver:
 
 async def run():
     config = configparser.ConfigParser()
-    config.read(f'{config_dir}/config.ini')
+    config.read(f"{config_dir}/config.ini")
 
-    parser = argparse.ArgumentParser(description='FM receiver and demodulator')
-    parser.add_argument('--host', type=str, default=config['Network']['HOST'], help='Host to connect to.')
-    parser.add_argument('--port', type=int, default=config['Network']['PORT'], help='Port number to listen on.')
-    parser.add_argument('--sample_rate', type=float, default=config['Processing']['SAMPLE_RATE'], help='Sample rate.')
-    parser.add_argument('--freq_offset', type=float, default=config['Demodulation']['FREQ_OFFSET'], help='Frequency offset for signal shifting (in Hz).')
-    parser.add_argument('--chunk_size', type=int, default=config['Processing']['CHUNK_SIZE'], help='Chunk size for processing samples.')
-    parser.add_argument('--center_freq', type=float, default=config['Server']['CENTER_FREQ'], help='Center frequency.')
-    parser.add_argument('--buffer_size', type=int, default=config['Server']['BUFFER_SIZE'], help='Buffer size.')
-    parser.add_argument('--gain', type=float, default=config['Server']['GAIN'], help='Gain.')
+    parser = argparse.ArgumentParser(description="FM receiver and demodulator")
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=config["Network"]["HOST"],
+        help="Host to connect to.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=config["Network"]["PORT"],
+        help="Port number to listen on.",
+    )
+    parser.add_argument(
+        "--sample_rate",
+        type=float,
+        default=config["Processing"]["SAMPLE_RATE"],
+        help="Sample rate.",
+    )
+    parser.add_argument(
+        "--freq_offset",
+        type=float,
+        default=config["Demodulation"]["FREQ_OFFSET"],
+        help="Frequency offset for signal shifting (in Hz).",
+    )
+    parser.add_argument(
+        "--chunk_size",
+        type=int,
+        default=config["Processing"]["CHUNK_SIZE"],
+        help="Chunk size for processing samples.",
+    )
+    parser.add_argument(
+        "--center_freq",
+        type=float,
+        default=config["Server"]["CENTER_FREQ"],
+        help="Center frequency.",
+    )
+    parser.add_argument(
+        "--buffer_size",
+        type=int,
+        default=config["Server"]["BUFFER_SIZE"],
+        help="Buffer size.",
+    )
+    parser.add_argument(
+        "--gain", type=float, default=config["Server"]["GAIN"], help="Gain."
+    )
 
     args = parser.parse_args()
 
     receiver = Receiver(args)
     try:
-        await asyncio.gather(
-            receiver.stream_samples(),
-            receiver.control_listener()
-        )
+        await asyncio.gather(receiver.stream_samples(), receiver.control_listener())
     except asyncio.CancelledError:
         print("Server shutdown requested (Ctrl+C)")
     finally:
         print("Do anything further if necessary")
 
+
 def main():
     asyncio.run(run())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
