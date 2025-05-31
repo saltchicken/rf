@@ -72,7 +72,7 @@ class Receiver:
         print("Receiver cleanup started.")
         try:
             if self.rx_stream:
-                stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_continuous)
+                stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
                 self.rx_stream.issue_stream_cmd(stop_cmd)
                 self.rx_stream = None
         except Exception as e:
