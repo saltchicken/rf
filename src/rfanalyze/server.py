@@ -58,7 +58,7 @@ class Receiver:
 
         self.sdr = SoapySDR.Device(args)
 
-        # self.sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW") # Needed for LimeSDR
+        self.sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW")  # Needed for LimeSDR
         self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
         self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
         # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
