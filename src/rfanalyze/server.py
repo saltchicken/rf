@@ -61,7 +61,7 @@ class Receiver:
         self.rx_stream = self.usrp.get_rx_stream(stream_args)
 
         # Start continuous streaming mode
-        stream_cmd = uhd.types.StreamCMD()
+        stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
         self.rx_stream.issue_stream_cmd(stream_cmd)
 
         print(
