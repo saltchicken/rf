@@ -47,7 +47,7 @@ class Receiver:
         }
 
     def setup_usrp(self):
-        self.usrp = uhd.usrp.MultiUSRP()
+        self.usrp = uhd.usrp.MultiUSRP("serial=31BADBF")
 
         self.usrp.set_rx_rate(self.sample_rate)
         self.usrp.set_rx_freq(self.center_freq)
