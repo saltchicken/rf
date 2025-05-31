@@ -61,7 +61,7 @@ class Receiver:
         self.rx_stream = self.usrp.get_rx_stream(stream_args)
 
         # Start continuous streaming mode
-        stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.START_CONTINUOUS)
+        stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_continuous)
         self.rx_stream.issue_stream_cmd(stream_cmd)
 
         print(
@@ -72,7 +72,7 @@ class Receiver:
         print("Receiver cleanup started.")
         try:
             if self.rx_stream:
-                stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.STOP_CONTINUOUS)
+                stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_continuous)
                 self.rx_stream.issue_stream_cmd(stop_cmd)
                 self.rx_stream = None
         except Exception as e:
