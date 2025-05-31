@@ -101,9 +101,9 @@ class Receiver:
                     )
                     if sr.ret > 0:
                         sample_bytes = buff[: sr.ret].tobytes()
-                        if len(sample_bytes) != self.buffer_size * 8:
-                            print(f"Short read: {len(sample_bytes)} bytes. Breaking")
-                            break
+                        # if len(sample_bytes) != self.buffer_size * 8:
+                        #     print(f"Short read: {len(sample_bytes)} bytes. Breaking")
+                        #     break
                         topic = b"samples"
                         length = struct.pack("!I", len(sample_bytes))
                         await self.pub_socket.send_multipart(
