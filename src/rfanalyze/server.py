@@ -86,37 +86,29 @@ class Receiver:
 
     async def stream_samples(self):
         loop = asyncio.get_running_loop()
-        # Allocate ctypes buffer for samples (fc32 = 2 floats per sample)
-        recv_buffer = (ctypes.c_float * (2 * self.buffer_size))()
+        recv_buffer = np.zeros(2 * self.buffer_size, dtype=np.float32)
         md = uhd.types.RXMetadata()
 
         try:
             while not self.stop_event.is_set():
-                # Run blocking recv in thread pool
                 num_samps = await loop.run_in_executor(
                     None,
                     self.rx_stream.recv,
                     recv_buffer,
-                    self.buffer_size,
                     md,
                     1.0,
                 )
 
                 if num_samps > 0:
-                    # Convert to numpy complex64 array
-                    np_samples = np.frombuffer(
-                        recv_buffer, dtype=np.float32, count=2 * num_samps
-                    ).view(np.complex64)
+                    # Interpret interleaved float32 as complex64
+                    np_samples = recv_buffer[: 2 * num_samps].view(np.complex64)
 
-                    # Serialize samples to bytes
+                    # Send over ZeroMQ
                     sample_bytes = np_samples.tobytes()
-
-                    # Prepare and send ZeroMQ message
                     topic = b"samples"
                     length = struct.pack("!I", len(sample_bytes))
                     await self.pub_socket.send_multipart([topic, length, sample_bytes])
                 else:
-                    # No samples received, short sleep to avoid busy loop
                     await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             print("Stream Samples: Server shutdown requested (Ctrl+C)")
