@@ -102,7 +102,7 @@ class Receiver:
                     if sr.ret > 0:
                         sample_bytes = buff[: sr.ret].tobytes()
                         if len(sample_bytes) != self.buffer_size * 8:
-                            print(f"Short read: {len(sample_bytes)} bytes. Breaking")
+                            print(f"Short read: {len(sample_bytes)} bytes. Skipping")
                             continue
                         topic = b"samples"
                         length = struct.pack("!I", len(sample_bytes))
@@ -136,7 +136,7 @@ class Receiver:
                 if "center_freq" in message:
                     self.center_freq = float(message["center_freq"])
                     print(f"Setting center frequency to {self.center_freq}")
-                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, 400e6)
+                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
 
                 if "sample_rate" in message:
                     self.sample_rate = float(message["sample_rate"])
