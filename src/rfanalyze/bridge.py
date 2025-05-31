@@ -4,15 +4,22 @@ import websockets
 import zmq
 import zmq.asyncio
 
+
 class Publisher:
     def __init__(self, host="localhost", port=8765):
         self.host = host
         self.port = port
         self.queue = asyncio.Queue(maxsize=1)
+        self.message_queue = asyncio.Queue(maxsize=1)
         self.server_task = asyncio.create_task(self.start_server())
         self.data = {"test": "testing"}
 
     async def handler(self, ws):
+        async def receive_and_forward_message():
+            while True:
+                msg = await self.message_queue.get()
+                await ws.send(json.dumps({"type": "update", "data": msg}))
+
         async def receive_and_forward():
             while True:
                 msg = await self.queue.get()
@@ -29,7 +36,8 @@ class Publisher:
         try:
             await asyncio.gather(
                 receive_and_forward(),
-                message_from_client()
+                receive_and_forward_message(),
+                message_from_client(),
             )
         except websockets.exceptions.ConnectionClosed:
             print("Client disconnected")
@@ -42,6 +50,7 @@ class Publisher:
         async with websockets.serve(self.handler, self.host, self.port):
             print(f"WebSocket server running on ws://{self.host}:{self.port}")
             await asyncio.Future()  # Run forever
+
 
 if __name__ == "__main__":
     asyncio.run(start_server())
