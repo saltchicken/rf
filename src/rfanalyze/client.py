@@ -155,8 +155,9 @@ class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.audio_sample_rate = 16000
+        self.sample_buffer_len = 160000
         self.audio_frames_per_buffer = math.ceil(
-            4096 / (self.sample_rate // self.audio_sample_rate)
+            self.sample_buffer_len / (self.sample_rate // self.audio_sample_rate)
         )
         self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
@@ -201,26 +202,37 @@ class ReaderListener(Reader):
 
     async def listen_sample(self):
         try:
+            # audio_buffer = np.array([], dtype=np.int16)
+            sample_buffer = np.array([], dtype=np.complex64)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
                 self.sample_queue.task_done()
 
-                # Frequency shift
-                signal = Signal(samples, self.sample_rate)
-                signal.apply_freq_offset(self.freq_offset)
-                signal.apply_low_pass_filter(100e3)
-                fm = FM(signal.samples, self.sample_rate)
-                fm.apply_fm_demodulation()
-                fm.apply_resample(self.audio_sample_rate)
-                # fm.apply_normalization()
-                fm.apply_volume(0.6)
-                fm.convert_to_int16()
+                sample_buffer = np.concatenate((sample_buffer, samples))
 
-                # Stream to audio output
-                try:
-                    self.audio_queue.put_nowait(fm.samples)
-                except queue.Full:
-                    print("Audio Queue full. Dropping frame.")
+                if len(sample_buffer) < self.sample_buffer_len:
+                    continue
+
+                else:
+                    samples = sample_buffer[: self.sample_buffer_len]
+                    sample_buffer = sample_buffer[self.sample_buffer_len :]
+
+                    # Frequency shift
+                    signal = Signal(samples, self.sample_rate)
+                    signal.apply_freq_offset(self.freq_offset)
+                    signal.apply_low_pass_filter(100e3)
+                    fm = FM(signal.samples, self.sample_rate)
+                    fm.apply_fm_demodulation()
+                    fm.apply_resample(self.audio_sample_rate)
+                    fm.apply_normalization()
+                    fm.apply_volume(0.25)
+                    fm.convert_to_int16()
+
+                    # Stream to audio output
+                    try:
+                        self.audio_queue.put_nowait(fm.samples)
+                    except queue.Full:
+                        print("Audio Queue full. Dropping frame.")
         except asyncio.CancelledError:
             print("Cancelled record_sample.")
         except Exception as e:
