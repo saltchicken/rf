@@ -95,11 +95,15 @@ class Reader:
         if settings.get("sample_rate") is not None:
             self.sample_rate = settings["sample_rate"]
         else:
-            print("THIS WAS NONE WHY")
+            print("THIS WAS NONE WHY1")
         if settings.get("center_freq") is not None:
             self.center_freq = settings["center_freq"]
+        else:
+            print("THIS WAS NONE WHY2")
         if settings.get("gain") is not None:
             self.gain = settings["gain"]
+        else:
+            print("THIS WAS NONE WHY3")
 
     def set_setting(self, setting, value):
         self.req_socket.send_json({setting: value})
