@@ -159,7 +159,7 @@ class ReaderListener(Reader):
         self.audio_frames_per_buffer = math.ceil(
             self.sample_buffer_len / (self.sample_rate // self.audio_sample_rate)
         )
-        self.audio_queue = multiprocessing.Queue(maxsize=1000)
+        self.audio_queue = multiprocessing.Queue(maxsize=10)
         self.audio_queue_stop_event = multiprocessing.Event()
         self.audio_proc = Process(
             target=self.audio_process_worker,
@@ -190,7 +190,7 @@ class ReaderListener(Reader):
         stream.start_stream()
         try:
             while stream.is_active():
-                time.sleep(0.001)
+                time.sleep(1)
 
         except Exception as e:
             print(f"Error in audio_process_worker: {e}")
