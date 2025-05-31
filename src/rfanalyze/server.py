@@ -1,4 +1,5 @@
-import argparse, configparser
+import argparse
+import configparser
 import asyncio
 import SoapySDR
 from SoapySDR import *  # SOAPY_SDR_ constants
@@ -6,7 +7,6 @@ import numpy as np
 import struct
 import zmq
 import zmq.asyncio
-
 from pathlib import Path
 
 config_dir = f"{Path(__file__).parent}/config"
@@ -22,6 +22,7 @@ class Receiver:
 
         self.sdr = None
         self.rxStream = None
+        self.stream_task = None
         self.setup_sdr()
 
         self.stop_event = asyncio.Event()
@@ -58,11 +59,8 @@ class Receiver:
 
         self.sdr = SoapySDR.Device(args)
 
-        # self.sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW") # Needed for LimeSDR
         self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
         self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
-        # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
-        # print(gain_range)
         self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
 
     def close(self):
@@ -83,42 +81,62 @@ class Receiver:
             self.ctx.term()
             print("Receiver cleanup finished.")
 
-    async def stream_samples(self):
+    async def start_stream(self):
+        if self.rxStream is not None:
+            print("Stream already running.")
+            return
         self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
         self.sdr.activateStream(self.rxStream)
-        loop = asyncio.get_running_loop()
+        self.stream_task = asyncio.create_task(self._stream_loop())
 
+    async def stop_stream(self):
+        if self.rxStream is None:
+            return
+        self.sdr.deactivateStream(self.rxStream)
+        self.sdr.closeStream(self.rxStream)
+        self.rxStream = None
+        if self.stream_task:
+            self.stream_task.cancel()
+            try:
+                await self.stream_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _stream_loop(self):
+        loop = asyncio.get_running_loop()
         try:
             while not self.stop_event.is_set():
-                try:
-                    buff = np.empty(self.buffer_size, np.complex64)
-                    sr = await loop.run_in_executor(
-                        None,
-                        self.sdr.readStream,
-                        self.rxStream,
-                        [buff],
-                        self.buffer_size,
-                    )
-                    if sr.ret > 0:
-                        sample_bytes = buff[: sr.ret].tobytes()
-                        if len(sample_bytes) != self.buffer_size * 8:
-                            print(f"Short read: {len(sample_bytes)} bytes. Skipping")
-                            continue
-                        topic = b"samples"
-                        length = struct.pack("!I", len(sample_bytes))
-                        await self.pub_socket.send_multipart(
-                            [topic, length, sample_bytes]
-                        )
-                    else:
-                        await asyncio.sleep(0.01)
-                except Exception as e:
-                    print(f"Error during stream processing: {e}")
+                buff = np.empty(self.buffer_size, np.complex64)
+                sr = await loop.run_in_executor(
+                    None, self.sdr.readStream, self.rxStream, [buff], self.buffer_size
+                )
+                if sr.ret > 0:
+                    sample_bytes = buff[: sr.ret].tobytes()
+                    if len(sample_bytes) != self.buffer_size * 8:
+                        print(f"Short read: {len(sample_bytes)} bytes. Skipping")
+                        continue
+                    topic = b"samples"
+                    length = struct.pack("!I", len(sample_bytes))
+                    await self.pub_socket.send_multipart([topic, length, sample_bytes])
+                else:
+                    await asyncio.sleep(0.01)
         except asyncio.CancelledError:
-            print("Stream Samples: Server shutdown requested (Ctrl+C)")
-            self.stop_event.set()
-        finally:
-            await asyncio.sleep(1)
-            self.close()
+            print("Stream loop cancelled.")
+        except Exception as e:
+            print(f"Error in stream loop: {e}")
+
+    async def reconfigure(self, setting_name, value):
+        await self.stop_stream()
+        if setting_name == "center_freq":
+            self.center_freq = float(value)
+            self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+        elif setting_name == "sample_rate":
+            self.sample_rate = float(value)
+            self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+        elif setting_name == "gain":
+            self.gain = float(value)
+            self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
+        await self.start_stream()
 
     async def control_listener(self):
         while not self.stop_event.is_set():
@@ -129,18 +147,14 @@ class Receiver:
                     await self.rep_socket.send_json(self.get_current_settings())
                     continue
 
-                if "gain" in message:
-                    self.gain = float(message["gain"])
-                    self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
-
                 if "center_freq" in message:
-                    self.center_freq = float(message["center_freq"])
-                    print(f"Setting center frequency to {self.center_freq}")
-                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+                    await self.reconfigure("center_freq", message["center_freq"])
 
                 if "sample_rate" in message:
-                    self.sample_rate = float(message["sample_rate"])
-                    self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+                    await self.reconfigure("sample_rate", message["sample_rate"])
+
+                if "gain" in message:
+                    await self.reconfigure("gain", message["gain"])
 
                 response = {"status": "ok"}
                 await self.rep_socket.send_json(response)
@@ -148,7 +162,6 @@ class Receiver:
             except asyncio.CancelledError:
                 print("Control Listener: Server shutdown requested (Ctrl+C)")
                 self.stop_event.set()
-
             except Exception as e:
                 print(f"Control listener error: {e}")
                 await self.rep_socket.send_json({"status": "error", "message": str(e)})
@@ -161,61 +174,40 @@ async def run():
     config.read(f"{config_dir}/config.ini")
 
     parser = argparse.ArgumentParser(description="FM receiver and demodulator")
-    parser.add_argument(
-        "--host",
-        type=str,
-        default=config["Network"]["HOST"],
-        help="Host to connect to.",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=config["Network"]["PORT"],
-        help="Port number to listen on.",
-    )
+    parser.add_argument("--host", type=str, default=config["Network"]["HOST"])
+    parser.add_argument("--port", type=int, default=config.getint("Network", "PORT"))
     parser.add_argument(
         "--sample_rate",
         type=float,
-        default=config["Processing"]["SAMPLE_RATE"],
-        help="Sample rate.",
+        default=config.getfloat("Processing", "SAMPLE_RATE"),
     )
     parser.add_argument(
         "--freq_offset",
         type=float,
-        default=config["Demodulation"]["FREQ_OFFSET"],
-        help="Frequency offset for signal shifting (in Hz).",
+        default=config.getfloat("Demodulation", "FREQ_OFFSET"),
     )
     parser.add_argument(
-        "--chunk_size",
-        type=int,
-        default=config["Processing"]["CHUNK_SIZE"],
-        help="Chunk size for processing samples.",
+        "--chunk_size", type=int, default=config.getint("Processing", "CHUNK_SIZE")
     )
     parser.add_argument(
-        "--center_freq",
-        type=float,
-        default=config["Server"]["CENTER_FREQ"],
-        help="Center frequency.",
+        "--center_freq", type=float, default=config.getfloat("Server", "CENTER_FREQ")
     )
     parser.add_argument(
-        "--buffer_size",
-        type=int,
-        default=config["Server"]["BUFFER_SIZE"],
-        help="Buffer size.",
+        "--buffer_size", type=int, default=config.getint("Server", "BUFFER_SIZE")
     )
-    parser.add_argument(
-        "--gain", type=float, default=config["Server"]["GAIN"], help="Gain."
-    )
+    parser.add_argument("--gain", type=float, default=config.getfloat("Server", "GAIN"))
 
     args = parser.parse_args()
 
     receiver = Receiver(args)
     try:
-        await asyncio.gather(receiver.stream_samples(), receiver.control_listener())
+        await asyncio.gather(receiver.start_stream(), receiver.control_listener())
     except asyncio.CancelledError:
         print("Server shutdown requested (Ctrl+C)")
+        receiver.stop_event.set()
     finally:
-        print("Do anything further if necessary")
+        await receiver.stop_stream()
+        receiver.close()
 
 
 def main():
