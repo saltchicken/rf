@@ -136,7 +136,7 @@ class Receiver:
                 if "center_freq" in message:
                     self.center_freq = float(message["center_freq"])
                     print(f"Setting center frequency to {self.center_freq}")
-                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+                    # self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
 
                 if "sample_rate" in message:
                     self.sample_rate = float(message["sample_rate"])
