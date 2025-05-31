@@ -3,6 +3,7 @@ from scipy.signal import firwin, lfilter, medfilt, resample_poly
 from scipy.ndimage import gaussian_filter1d
 from scipy.io.wavfile import write
 
+
 class Sample:
     def __init__(self, samples, sample_rate):
         self.samples = samples
@@ -12,6 +13,23 @@ class Sample:
         decimation_factor = int(self.sample_rate / down_sample_rate)
         self.samples = resample_poly(self.samples, up=1, down=decimation_factor)
         self.sample_rate = down_sample_rate
+
+    def apply_de_emphasis_filter(self, tau: float = 75e-6):
+        """
+        Apply de-emphasis filter to the FM demodulated signal.
+        tau: time constant in seconds (75e-6 for US, 50e-6 for Europe)
+        """
+        # Compute de-emphasis filter coefficient
+        dt = 1.0 / self.sample_rate
+        alpha = dt / (tau + dt)
+
+        # Apply single-pole low-pass filter (de-emphasis)
+        out = np.empty_like(self.samples)
+        out[0] = self.samples[0]
+        for i in range(1, len(self.samples)):
+            out[i] = alpha * self.samples[i] + (1 - alpha) * out[i - 1]
+        self.samples = out
+
 
 class Signal(Sample):
     def __init__(self, samples, sample_rate):
@@ -27,13 +45,16 @@ class Signal(Sample):
         fir_coeff = firwin(num_taps, cutoff_hz / nyquist_rate)
         self.samples = lfilter(fir_coeff, 1.0, self.samples)
 
+
 class FFT(Sample):
     def __init__(self, samples, sample_rate, freqs=None):
         super().__init__(samples, sample_rate)
         self.fft_size = 1024
 
         if freqs is None:
-            freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
+            freqs = np.fft.fftshift(
+                np.fft.fftfreq(self.fft_size, 1 / self.sample_rate)
+            ).astype(np.float32)
         self.freqs = freqs
         self.magnitude = self.fft()
 
@@ -50,12 +71,15 @@ class FFT(Sample):
 
     def apply_smooth_moving_average(self, window_size):
         kernel = np.ones(window_size) / window_size
-        self.magnitude = np.convolve(self.magnitude, kernel, mode='same').astype(np.float32)
+        self.magnitude = np.convolve(self.magnitude, kernel, mode="same").astype(
+            np.float32
+        )
 
     def apply_exponential_moving_average(self, previous_magnitude, alpha=0.3):
-            if previous_magnitude is None:
-                return self.magnitude
-            return alpha * self.magnitude + (1 - alpha) * previous_magnitude
+        if previous_magnitude is None:
+            return self.magnitude
+        return alpha * self.magnitude + (1 - alpha) * previous_magnitude
+
 
 class FM(Sample):
     def __init__(self, samples, sample_rate):
