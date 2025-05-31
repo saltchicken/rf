@@ -1,4 +1,5 @@
 import asyncio
+import math
 import struct
 import numpy as np
 import zmq
@@ -89,6 +90,17 @@ class Reader:
         response = self.req_socket.recv_json()
         return response
 
+    async def update_settings(self):
+        settings = await self.get_current_settings()
+        if settings.get("sample_rate") is not None:
+            self.sample_rate = settings["sample_rate"]
+        else:
+            print("THIS WAS NONE WHY")
+        if settings.get("center_freq") is not None:
+            self.center_freq = settings["center_freq"]
+        if settings.get("gain") is not None:
+            self.gain = settings["gain"]
+
     def set_setting(self, setting, value):
         self.req_socket.send_json({setting: value})
         response = self.req_socket.recv_json()
@@ -143,7 +155,9 @@ class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.audio_sample_rate = 16000
-        self.audio_frames_per_buffer = 1024
+        self.audio_frames_per_buffer = math.ceil(
+            4096 / (self.sample_rate // self.audio_sample_rate)
+        )
         self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
         self.audio_proc = Process(
@@ -175,7 +189,7 @@ class ReaderListener(Reader):
         stream.start_stream()
         try:
             while stream.is_active():
-                time.sleep(0.1)
+                time.sleep(0.001)
 
         except Exception as e:
             print(f"Error in audio_process_worker: {e}")
@@ -187,7 +201,6 @@ class ReaderListener(Reader):
 
     async def listen_sample(self):
         try:
-            audio_buffer = np.array([], dtype=np.int16)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
                 self.sample_queue.task_done()
@@ -203,17 +216,11 @@ class ReaderListener(Reader):
                 fm.apply_volume(0.6)
                 fm.convert_to_int16()
 
-                audio_buffer = np.concatenate((audio_buffer, fm.samples))
-
                 # Stream to audio output
-                if len(audio_buffer) >= self.audio_frames_per_buffer:
-                    try:
-                        self.audio_queue.put_nowait(
-                            audio_buffer[: self.audio_frames_per_buffer]
-                        )
-                        audio_buffer = audio_buffer[self.audio_frames_per_buffer :]
-                    except queue.Full:
-                        print("Audio Queue full. Dropping frame.")
+                try:
+                    self.audio_queue.put_nowait(fm.samples)
+                except queue.Full:
+                    print("Audio Queue full. Dropping frame.")
         except asyncio.CancelledError:
             print("Cancelled record_sample.")
         except Exception as e:
