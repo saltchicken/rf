@@ -1,13 +1,14 @@
-import argparse, configparser
+import argparse
+import configparser
 import asyncio
-import SoapySDR
-from SoapySDR import *  # SOAPY_SDR_ constants
-import numpy as np
 import struct
+import ctypes
+from pathlib import Path
+
+import numpy as np
 import zmq
 import zmq.asyncio
-
-from pathlib import Path
+import uhd
 
 config_dir = f"{Path(__file__).parent}/config"
 
@@ -20,10 +21,8 @@ class Receiver:
         self.buffer_size = args.buffer_size
         self.gain = args.gain
 
-        self.sdr = None
-        self.rxStream = None
-        self.setup_sdr()
-
+        self.usrp = None
+        self.rx_stream = None
         self.stop_event = asyncio.Event()
 
         self.ctx = zmq.asyncio.Context()
@@ -39,6 +38,8 @@ class Receiver:
         self.rep_socket.bind(f"tcp://0.0.0.0:{self.rep_port}")
         print(f"ZeroMQ REP server listening on port {self.rep_port}")
 
+        self.setup_usrp()
+
     def get_current_settings(self):
         return {
             "sample_rate": self.sample_rate,
@@ -46,76 +47,74 @@ class Receiver:
             "gain": self.gain,
         }
 
-    def setup_sdr(self, driver=None):
-        if driver:
-            args = SoapySDR.SoapySDRKwargs()
-            args["driver"] = driver
-        else:
-            results = SoapySDR.Device.enumerate()
-            if not results:
-                raise RuntimeError("No SDR devices found.")
-            args = results[0]
+    def setup_usrp(self):
+        print("Setting up USRP device...")
+        # Initialize USRP device with B200 driver (B210 uses same)
+        self.usrp = uhd.usrp.MultiUSRP("type=b200")
 
-        self.sdr = SoapySDR.Device(args)
+        self.usrp.set_rx_rate(self.sample_rate)
+        self.usrp.set_rx_freq(self.center_freq)
+        self.usrp.set_rx_gain(self.gain)
 
-        # self.sdr.setAntenna(SOAPY_SDR_RX, 0, "LNAW") # Needed for LimeSDR
-        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
-        self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
-        # gain_range = self.sdr.getGainRange(SOAPY_SDR_RX, 0)
-        # print(gain_range)
-        self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
+        # Setup streaming arguments (fc32 = complex float32)
+        stream_args = uhd.usrp.StreamArgs("fc32", "sc16")
+        self.rx_stream = self.usrp.get_rx_stream(stream_args)
+
+        # Start continuous streaming mode
+        stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
+        self.rx_stream.issue_stream_cmd(stream_cmd)
+
+        print(
+            f"USRP configured: sample_rate={self.sample_rate}, freq={self.center_freq}, gain={self.gain}"
+        )
 
     def close(self):
         print("Receiver cleanup started.")
         try:
-            if self.sdr:
-                try:
-                    if self.rxStream is not None:
-                        self.sdr.deactivateStream(self.rxStream)
-                        self.sdr.closeStream(self.rxStream)
-                        self.rxStream = None
-                except Exception as e:
-                    print(f"Error closing SDR stream: {e}")
+            if self.rx_stream:
+                stop_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
+                self.rx_stream.issue_stream_cmd(stop_cmd)
+                self.rx_stream = None
+        except Exception as e:
+            print(f"Error closing UHD stream: {e}")
         finally:
-            self.sdr = None
+            self.usrp = None
             self.pub_socket.close(linger=0)
             self.rep_socket.close(linger=0)
             self.ctx.term()
             print("Receiver cleanup finished.")
 
     async def stream_samples(self):
-        self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-        self.sdr.activateStream(self.rxStream)
         loop = asyncio.get_running_loop()
+        recv_buffer = np.zeros(2 * self.buffer_size, dtype=np.float32)
+        md = uhd.types.RXMetadata()
 
         try:
             while not self.stop_event.is_set():
-                try:
-                    buff = np.empty(self.buffer_size, np.complex64)
-                    sr = await loop.run_in_executor(
-                        None,
-                        self.sdr.readStream,
-                        self.rxStream,
-                        [buff],
-                        self.buffer_size,
-                    )
-                    if sr.ret > 0:
-                        sample_bytes = buff[: sr.ret].tobytes()
-                        if len(sample_bytes) != self.buffer_size * 8:
-                            print(f"Short read: {len(sample_bytes)} bytes. Skipping")
-                            continue
-                        topic = b"samples"
-                        length = struct.pack("!I", len(sample_bytes))
-                        await self.pub_socket.send_multipart(
-                            [topic, length, sample_bytes]
-                        )
-                    else:
-                        await asyncio.sleep(0.01)
-                except Exception as e:
-                    print(f"Error during stream processing: {e}")
+                num_samps = await loop.run_in_executor(
+                    None,
+                    self.rx_stream.recv,
+                    recv_buffer,
+                    md,
+                    1.0,
+                )
+
+                if num_samps > 0:
+                    # Interpret interleaved float32 as complex64
+                    np_samples = recv_buffer[: 2 * num_samps].view(np.complex64)
+
+                    # Send over ZeroMQ
+                    sample_bytes = np_samples.tobytes()
+                    topic = b"samples"
+                    length = struct.pack("!I", len(sample_bytes))
+                    await self.pub_socket.send_multipart([topic, length, sample_bytes])
+                else:
+                    await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             print("Stream Samples: Server shutdown requested (Ctrl+C)")
             self.stop_event.set()
+        except Exception as e:
+            print(f"Error during stream processing: {e}")
         finally:
             await asyncio.sleep(1)
             self.close()
@@ -131,16 +130,16 @@ class Receiver:
 
                 if "gain" in message:
                     self.gain = float(message["gain"])
-                    self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
+                    self.usrp.set_rx_gain(self.gain)
 
                 if "center_freq" in message:
                     self.center_freq = float(message["center_freq"])
                     print(f"Setting center frequency to {self.center_freq}")
-                    self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.center_freq)
+                    self.usrp.set_rx_freq(self.center_freq)
 
                 if "sample_rate" in message:
                     self.sample_rate = float(message["sample_rate"])
-                    self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
+                    self.usrp.set_rx_rate(self.sample_rate)
 
                 response = {"status": "ok"}
                 await self.rep_socket.send_json(response)
@@ -170,41 +169,41 @@ async def run():
     parser.add_argument(
         "--port",
         type=int,
-        default=config["Network"]["PORT"],
+        default=int(config["Network"]["PORT"]),
         help="Port number to listen on.",
     )
     parser.add_argument(
         "--sample_rate",
         type=float,
-        default=config["Processing"]["SAMPLE_RATE"],
+        default=float(config["Processing"]["SAMPLE_RATE"]),
         help="Sample rate.",
     )
     parser.add_argument(
         "--freq_offset",
         type=float,
-        default=config["Demodulation"]["FREQ_OFFSET"],
+        default=float(config["Demodulation"]["FREQ_OFFSET"]),
         help="Frequency offset for signal shifting (in Hz).",
     )
     parser.add_argument(
         "--chunk_size",
         type=int,
-        default=config["Processing"]["CHUNK_SIZE"],
+        default=int(config["Processing"]["CHUNK_SIZE"]),
         help="Chunk size for processing samples.",
     )
     parser.add_argument(
         "--center_freq",
         type=float,
-        default=config["Server"]["CENTER_FREQ"],
+        default=float(config["Server"]["CENTER_FREQ"]),
         help="Center frequency.",
     )
     parser.add_argument(
         "--buffer_size",
         type=int,
-        default=config["Server"]["BUFFER_SIZE"],
+        default=int(config["Server"]["BUFFER_SIZE"]),
         help="Buffer size.",
     )
     parser.add_argument(
-        "--gain", type=float, default=config["Server"]["GAIN"], help="Gain."
+        "--gain", type=float, default=float(config["Server"]["GAIN"]), help="Gain."
     )
 
     args = parser.parse_args()
@@ -215,7 +214,7 @@ async def run():
     except asyncio.CancelledError:
         print("Server shutdown requested (Ctrl+C)")
     finally:
-        print("Do anything further if necessary")
+        print("Receiver shutdown complete.")
 
 
 def main():
