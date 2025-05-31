@@ -18,16 +18,17 @@ from .bridge import Publisher
 from .classes import Signal, FFT, FM
 
 
-
 def complex_from_bytes(data):
     samples = np.frombuffer(data, dtype=np.float32)
     return samples[0::2] + 1j * samples[1::2]
+
 
 class Reader:
     def __init__(self, args):
         self.host = args.host
         self.port = args.port
         self.sample_rate = args.sample_rate
+        self.center_freq = args.center_freq
         self.freq_offset = args.freq_offset
         self.chunk_size = args.chunk_size
 
@@ -43,14 +44,18 @@ class Reader:
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
         socket.connect(f"tcp://{self.host}:{self.port}")
-        socket.setsockopt_string(zmq.SUBSCRIBE, '')  # Subscribe to all topics
+        socket.setsockopt_string(zmq.SUBSCRIBE, "")  # Subscribe to all topics
 
         buffer = np.array([], dtype=np.complex64)
 
         try:
             while not self.stop_event.is_set():
-                topic, length, sample_bytes = await socket.recv_multipart()  # Receives one full message
-                length = struct.unpack('!I', length)[0]
+                (
+                    topic,
+                    length,
+                    sample_bytes,
+                ) = await socket.recv_multipart()  # Receives one full message
+                length = struct.unpack("!I", length)[0]
                 if len(sample_bytes) % 8 != 0:
                     print(f"Received invalid buffer of length {len(sample_bytes)}")
                     continue
@@ -59,11 +64,11 @@ class Reader:
 
                 if len(buffer) >= self.chunk_size:
                     try:
-                        self.sample_queue.put_nowait(buffer[:self.chunk_size])
+                        self.sample_queue.put_nowait(buffer[: self.chunk_size])
                     except asyncio.QueueFull:
                         print("Queue full. Dropping frame.")
 
-                    buffer = buffer[self.chunk_size:]
+                    buffer = buffer[self.chunk_size :]
                     if buffer.shape != (0,):
                         print(f"Buffer shape error: {buffer.shape}")
 
@@ -88,8 +93,6 @@ class Reader:
         self.req_socket.send_json({setting: value})
         response = self.req_socket.recv_json()
         return response
-
-
 
 
 class ReaderRecorder(Reader):
@@ -120,7 +123,7 @@ class ReaderRecorder(Reader):
 
         fm = FM(signal.samples, self.sample_rate)
         fm.apply_fm_demodulation()
-        fm.apply_resample(16000) # This is now audio
+        fm.apply_resample(16000)  # This is now audio
         fm.apply_normalization()
         fm.convert_to_int16()
 
@@ -135,6 +138,7 @@ class ReaderRecorder(Reader):
         results = await asyncio.gather(record_task, receive_task)
         return results[0]
 
+
 class ReaderListener(Reader):
     def __init__(self, args):
         super().__init__(args)
@@ -142,7 +146,10 @@ class ReaderListener(Reader):
         self.audio_frames_per_buffer = 1024
         self.audio_queue = multiprocessing.Queue(maxsize=1000)
         self.audio_queue_stop_event = multiprocessing.Event()
-        self.audio_proc = Process(target=self.audio_process_worker, args=(self.audio_queue, self.audio_queue_stop_event))
+        self.audio_proc = Process(
+            target=self.audio_process_worker,
+            args=(self.audio_queue, self.audio_queue_stop_event),
+        )
         self.audio_proc.start()
 
     def audio_process_worker(self, audio_queue, audio_queue_stop_event):
@@ -153,17 +160,18 @@ class ReaderListener(Reader):
                 audio_chunk = audio_queue.get_nowait()
             except queue.Empty:
                 print("Audio queue empty, inserting silence")
-                audio_chunk = b'\x00' * frame_count * 2
+                audio_chunk = b"\x00" * frame_count * 2
             return (audio_chunk, pyaudio.paContinue)
 
         p = pyaudio.PyAudio()
-        stream = p.open(format=pyaudio.paInt16,
-                        channels=1,
-                        rate=self.audio_sample_rate,
-                        output=True,
-                        stream_callback=callback,
-                        frames_per_buffer=self.audio_frames_per_buffer
-                        )
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=self.audio_sample_rate,
+            output=True,
+            stream_callback=callback,
+            frames_per_buffer=self.audio_frames_per_buffer,
+        )
         stream.start_stream()
         try:
             while stream.is_active():
@@ -191,8 +199,8 @@ class ReaderListener(Reader):
                 fm = FM(signal.samples, self.sample_rate)
                 fm.apply_fm_demodulation()
                 fm.apply_resample(self.audio_sample_rate)
-                fm.apply_normalization()
-                fm.apply_volume(0.25)
+                # fm.apply_normalization()
+                fm.apply_volume(0.6)
                 fm.convert_to_int16()
 
                 audio_buffer = np.concatenate((audio_buffer, fm.samples))
@@ -200,8 +208,10 @@ class ReaderListener(Reader):
                 # Stream to audio output
                 if len(audio_buffer) >= self.audio_frames_per_buffer:
                     try:
-                        self.audio_queue.put_nowait(audio_buffer[:self.audio_frames_per_buffer])
-                        audio_buffer = audio_buffer[self.audio_frames_per_buffer:]
+                        self.audio_queue.put_nowait(
+                            audio_buffer[: self.audio_frames_per_buffer]
+                        )
+                        audio_buffer = audio_buffer[self.audio_frames_per_buffer :]
                     except queue.Full:
                         print("Audio Queue full. Dropping frame.")
         except asyncio.CancelledError:
@@ -212,13 +222,20 @@ class ReaderListener(Reader):
             self.stop_event.set()
             self.audio_queue_stop_event.set()
 
+    async def run(self):
+        receive_task = asyncio.create_task(self.receive_samples())
+        listen_task = asyncio.create_task(self.listen_sample())
+        results = await asyncio.gather(listen_task, receive_task)
+        return results[0]
+
+
 class ReaderFFT(Reader):
     def __init__(self, args):
         super().__init__(args)
         self.fft_size = 1024
 
         self.publisher_port = args.publisher_port
-        self.publisher = Publisher(port = self.publisher_port)
+        self.publisher = Publisher(port=self.publisher_port)
         self.previous_magnitude = None
         self.ema_alpha = 0.3
 
@@ -226,10 +243,11 @@ class ReaderFFT(Reader):
         total_samples = []
         samples_recorded = 0
 
-
         # TODO: Take a relook at this. Calling a whole request that may not be necessary and also may need to be updated later
         settings = await self.get_current_settings()
-        freqs = np.fft.fftshift(np.fft.fftfreq(self.fft_size, 1/self.sample_rate)).astype(np.float32)
+        freqs = np.fft.fftshift(
+            np.fft.fftfreq(self.fft_size, 1 / self.sample_rate)
+        ).astype(np.float32)
         freqs += float(settings["center_freq"])
         self.publisher.data = freqs.tolist()
 
@@ -239,7 +257,7 @@ class ReaderFFT(Reader):
             total_samples.append(samples)
             self.sample_queue.task_done()
 
-            if samples_recorded >= 16: # 32, 64, 128
+            if samples_recorded >= 16:  # 32, 64, 128
                 samples_recorded = 0
 
                 samples = np.concatenate(total_samples, axis=0)
@@ -251,7 +269,9 @@ class ReaderFFT(Reader):
                 fft.apply_median_filter(5)
                 fft.apply_smooth_moving_average(5)
 
-                smoothed = fft.apply_exponential_moving_average(self.previous_magnitude, self.ema_alpha)
+                smoothed = fft.apply_exponential_moving_average(
+                    self.previous_magnitude, self.ema_alpha
+                )
                 self.previous_magnitude = smoothed
                 fft.magnitude = smoothed
 
@@ -262,19 +282,18 @@ class ReaderFFT(Reader):
                 except asyncio.QueueFull:
                     print("Queue full. Dropping frame.")
 
-
     async def run(self):
         record_task = asyncio.create_task(self.analyze_sample())
         receive_task = asyncio.create_task(self.receive_samples())
         try:
-            results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
+            results = await asyncio.gather(
+                record_task, receive_task, self.publisher.server_task
+            )
             return results[0]
         except asyncio.CancelledError:
             print("Cancelled run.")
         except Exception as e:
             print(f"Error in run: {e}")
-
-
 
 
 class ReaderConstellation(Reader):
@@ -313,7 +332,7 @@ class ReaderConstellation(Reader):
                 iq_samples = []
 
                 # Remove DC offset
-                samples -= np.mean(samples) 
+                samples -= np.mean(samples)
 
                 # samples = self.fm_demodulate(samples)
                 # Normalize or decimate if needed
@@ -334,6 +353,7 @@ class ReaderConstellation(Reader):
     async def run(self):
         record_task = asyncio.create_task(self.analyze_sample())
         receive_task = asyncio.create_task(self.receive_samples())
-        results = await asyncio.gather(record_task, receive_task, self.publisher.server_task)
+        results = await asyncio.gather(
+            record_task, receive_task, self.publisher.server_task
+        )
         return results[0]
-
