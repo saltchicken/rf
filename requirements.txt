@@ -1,6 +1,9 @@
-numpy
+fastapi
 matplotlib
+numpy
+pyaudio
 PyQt6
-pyaudio
+scipy
+uvicorn
+websockets
 zmq
-pyaudio
