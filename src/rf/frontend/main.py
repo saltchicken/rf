@@ -1,6 +1,7 @@
 import asyncio
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from rf import ReaderFFT, ReaderListener
@@ -45,7 +46,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+assets_path = Path(__file__).parent / "dist/assets"
+app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
 
 @app.get("/")
