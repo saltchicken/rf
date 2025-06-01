@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import GainControl from './components/GainControl';
 import CenterFreqControl from './components/CenterFreqControl';
 import FFTPlot from './components/FFTPlot';
