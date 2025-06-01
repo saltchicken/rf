@@ -5,7 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rf"
 version = "0.1.0"
-dependencies = ["numpy", "matplotlib", "zmq", "pyaudio"]
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "zmq",
+  "pyaudio",
+  "websockets",
+  "fastapi",
+  "uvicorn",
+  "scipy",
+]
 
 [project.scripts]
 rf = "rf.__main__:main"
