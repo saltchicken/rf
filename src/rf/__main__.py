@@ -1,6 +1,5 @@
 import uvicorn
 import os
-import subprocess
 import argparse
 from pathlib import Path
 
@@ -22,12 +21,12 @@ def main():
 
     if args.command == "build":
         os.chdir(frontend_dir)
-        subprocess.run(["bun", "install"], cwd=frontend_dir)
-        subprocess.run(["bun", "run", "build"], cwd=frontend_dir)
+        os.system("bun install")
+        os.system("bun run build")
 
         # For example: os.system("npm run build")
     else:
-        # os.chdir(frontend_dir)
+        os.chdir(frontend_dir)
         uvicorn.run("rf.frontend.main:app", host="127.0.0.1", port=5000)
 
 
