@@ -3,24 +3,19 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rfanalyze"
+name = "rf"
 version = "0.1.0"
-dependencies = [
-  "numpy",
-  "matplotlib",
-  "zmq",
-  "pyaudio"
-]
+dependencies = ["numpy", "matplotlib", "zmq", "pyaudio"]
 
 [project.scripts]
-rf = "rfanalyze.__main__:main"
-rf_server = "rfanalyze.server:main"
+rf = "rf.__main__:main"
+rf_server = "rf.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-rfanalyze = ["config/*"]
+rf = ["config/*"]
 
 [tool.setuptools]
 include-package-data = true
