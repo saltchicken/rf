@@ -42,6 +42,12 @@ class Reader:
         # TODO: Figure out how to set port better
         self.req_socket.connect(f"tcp://{self.host}:5001")
 
+    @classmethod
+    async def create(cls, host, port):
+        reader = cls(host, port)
+        await reader.update_settings()
+        return reader
+
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
         socket.connect(f"tcp://{self.host}:{self.port}")
