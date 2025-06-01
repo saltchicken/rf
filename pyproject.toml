@@ -15,7 +15,7 @@ rf_server = "rf.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-rf = ["config/*"]
+rf = ["config/**", "frontend/**"]
 
 [tool.setuptools]
 include-package-data = true
