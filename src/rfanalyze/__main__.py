@@ -7,7 +7,6 @@ from .client import (
     ReaderListener,
     ReaderRecorder,
     ReaderFFT,
-    ReaderConstellation,
 )
 
 from pathlib import Path
@@ -125,26 +124,26 @@ async def run():
     args = get_args()
 
     if args.command == "record":
-        reader_recorder = ReaderRecorder(args)
+        reader_recorder = ReaderRecorder(args.host, args.port)
         # await reader_recorder.set_setting('gain', 30)
         # settings = await reader_recorder.get_current_settings()
         # print(settings)
         await reader_recorder.run()
     elif args.command == "listen":
-        reader_listener = ReaderListener(args)
+        reader_listener = ReaderListener(args.host, args.port)
         receive_task = asyncio.create_task(reader_listener.receive_samples())
         listen_task = asyncio.create_task(reader_listener.listen_sample())
         await asyncio.gather(listen_task, receive_task)
     elif args.command == "fft":
-        reader_fft = ReaderFFT(args)
+        reader_fft = ReaderFFT(args.host, args.port)
         await reader_fft.run()
     elif args.command == "edit":
         open_config_file()
     elif args.command == "constellation":
-        reader_constellation = ReaderConstellation(args)
+        reader_constellation = ReaderConstellation(args.host, args.port)
         await reader_constellation.run()
     elif args.command == "command":
-        reader = Reader(args)
+        reader = Reader(args.host, args.port)
         response = await reader.set_setting(args.setting, args.value)
         print(response)
     else:

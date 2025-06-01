@@ -25,13 +25,13 @@ def complex_from_bytes(data):
 
 
 class Reader:
-    def __init__(self, args):
-        self.host = args.host
-        self.port = args.port
-        self.sample_rate = args.sample_rate
-        self.center_freq = args.center_freq
-        self.freq_offset = args.freq_offset
-        self.chunk_size = args.chunk_size
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.sample_rate = 2000000
+        self.center_freq = 106000000
+        self.freq_offset = 100000
+        self.chunk_size = 4096
 
         self.stop_event = asyncio.Event()
         self.sample_queue = asyncio.Queue(maxsize=10)
@@ -122,10 +122,10 @@ class Reader:
 
 
 class ReaderRecorder(Reader):
-    def __init__(self, args):
-        super().__init__(args)
-        self.duration_seconds = args.duration
-        self.output_filename = args.output_filename
+    def __init__(self, host, port):
+        super().__init__(host, port)
+        self.duration_seconds = None
+        self.output_filename = None
 
     async def record_sample(self):
         total_samples = []
@@ -166,13 +166,15 @@ class ReaderRecorder(Reader):
 
 
 class ReaderListener(Reader):
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, host, port):
+        super().__init__(host, port)
         self.audio_sample_rate = 16000
         self.sample_buffer_len = 160000
         self.audio_frames_per_buffer = math.ceil(
-            self.sample_buffer_len / (self.sample_rate // self.audio_sample_rate)
+            self.sample_buffer_len
+            / (2000000 // self.audio_sample_rate)  # TODO: Replace with self.sample_rate
         )
+        print(f"Audio frames per buffer: {self.audio_frames_per_buffer}")
         self.audio_queue = multiprocessing.Queue(maxsize=10)
         self.audio_queue_stop_event = multiprocessing.Event()
         self.audio_proc = Process(
@@ -264,11 +266,11 @@ class ReaderListener(Reader):
 
 
 class ReaderFFT(Reader):
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, host, port):
+        super().__init__(host, port)
         self.fft_size = 1024
 
-        self.publisher_port = args.publisher_port
+        self.publisher_port = 8767  # TODO: Set this dynamically
         self.publisher = Publisher(port=self.publisher_port)
         self.previous_magnitude = None
         self.ema_alpha = 0.3
@@ -331,64 +333,64 @@ class ReaderFFT(Reader):
             print(f"Error in run: {e}")
 
 
-class ReaderConstellation(Reader):
-    def __init__(self, args):
-        super().__init__(args)
-        self.publisher = Publisher()
-        self.constellation_size = 1024  # Number of I/Q points to send at once
-        self.freq_offset = args.freq_offset
-
-    # def fm_demodulate(self, samples: np.ndarray) -> np.ndarray:
-    #     # FM demodulation using phase difference of IQ samples
-    #     phase_diff = np.angle(samples[1:] * np.conj(samples[:-1]))
-    #
-    #     # Resample to 1024 samples
-    #     resampled_phase_diff = resample(phase_diff, 1024)
-    #
-    #     return resampled_phase_diff
-
-    async def analyze_sample(self):
-        iq_samples = []
-
-        while not self.stop_event.is_set():
-            samples = await self.sample_queue.get()
-            self.sample_queue.task_done()
-
-            iq_samples.append(samples)
-
-            if len(iq_samples) >= 8:
-                samples = np.concatenate(iq_samples, axis=0)
-
-                # Frequency shift
-                t = np.arange(len(samples)) / self.sample_rate
-                samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
-
-                # samples = frequency_shift(samples, self.freq_offset, self.sample_rate)
-                iq_samples = []
-
-                # Remove DC offset
-                samples -= np.mean(samples)
-
-                # samples = self.fm_demodulate(samples)
-                # Normalize or decimate if needed
-                if len(samples) > self.constellation_size:
-                    step = len(samples) // self.constellation_size
-                    samples = resample_poly(samples, up=1, down=step)
-
-                # Prepare IQ data for publishing
-                iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
-                data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
-                #
-                # i_part = samples.real.astype(np.float32)
-                # q_part = samples.imag.astype(np.float32)
-                # data = np.concatenate((i_part, q_part)).tobytes()
-
-                self.publisher.publisher.send(data)
-
-    async def run(self):
-        record_task = asyncio.create_task(self.analyze_sample())
-        receive_task = asyncio.create_task(self.receive_samples())
-        results = await asyncio.gather(
-            record_task, receive_task, self.publisher.server_task
-        )
-        return results[0]
+# class ReaderConstellation(Reader):
+#     def __init__(self, args):
+#         super().__init__(args)
+#         self.publisher = Publisher()
+#         self.constellation_size = 1024  # Number of I/Q points to send at once
+#         self.freq_offset = args.freq_offset
+#
+#     # def fm_demodulate(self, samples: np.ndarray) -> np.ndarray:
+#     #     # FM demodulation using phase difference of IQ samples
+#     #     phase_diff = np.angle(samples[1:] * np.conj(samples[:-1]))
+#     #
+#     #     # Resample to 1024 samples
+#     #     resampled_phase_diff = resample(phase_diff, 1024)
+#     #
+#     #     return resampled_phase_diff
+#
+#     async def analyze_sample(self):
+#         iq_samples = []
+#
+#         while not self.stop_event.is_set():
+#             samples = await self.sample_queue.get()
+#             self.sample_queue.task_done()
+#
+#             iq_samples.append(samples)
+#
+#             if len(iq_samples) >= 8:
+#                 samples = np.concatenate(iq_samples, axis=0)
+#
+#                 # Frequency shift
+#                 t = np.arange(len(samples)) / self.sample_rate
+#                 samples = samples * np.exp(-1j * 2 * np.pi * self.freq_offset * t)
+#
+#                 # samples = frequency_shift(samples, self.freq_offset, self.sample_rate)
+#                 iq_samples = []
+#
+#                 # Remove DC offset
+#                 samples -= np.mean(samples)
+#
+#                 # samples = self.fm_demodulate(samples)
+#                 # Normalize or decimate if needed
+#                 if len(samples) > self.constellation_size:
+#                     step = len(samples) // self.constellation_size
+#                     samples = resample_poly(samples, up=1, down=step)
+#
+#                 # Prepare IQ data for publishing
+#                 iq_data = np.vstack((samples.real, samples.imag)).astype(np.float32)
+#                 data = iq_data.T.flatten().tobytes()  # [I0, Q0, I1, Q1, ...]
+#                 #
+#                 # i_part = samples.real.astype(np.float32)
+#                 # q_part = samples.imag.astype(np.float32)
+#                 # data = np.concatenate((i_part, q_part)).tobytes()
+#
+#                 self.publisher.publisher.send(data)
+#
+#     async def run(self):
+#         record_task = asyncio.create_task(self.analyze_sample())
+#         receive_task = asyncio.create_task(self.receive_samples())
+#         results = await asyncio.gather(
+#             record_task, receive_task, self.publisher.server_task
+#         )
+#         return results[0]
