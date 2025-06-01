@@ -194,9 +194,9 @@ function FFTPlot({ websocketUrl = "ws://localhost:8765" }) {
   }, [websocketUrl]);
 
   return (
-    <div className="fft-plots">
-      <div ref={fftContainerRef} style={{ width: '100%', height: '300px' }}></div>
-      <div ref={waterfallContainerRef} style={{ width: '100%', height: '300px' }}></div>
+    <div className="fft-plots" style={{ width: '100%', height: '100%' }}>
+      <div ref={fftContainerRef} style={{ width: '100%', height: '70%' }}></div>
+      <div ref={waterfallContainerRef} style={{ width: '100%', height: '30%' }}></div>
     </div>
   );
 }

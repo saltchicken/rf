@@ -5,8 +5,8 @@ import FFTPlot from './components/FFTPlot';
 
 function App() {
   return (
-    <div style={{ margin: 0, padding: 0, display: 'flex', flexDirection: 'column', height: '90vh', width: '90vw' }}>
-      <div style={{ margin: 0, background: '#111', color: '#ccc', height: '70%', width: '100vw' }}>
+    <div style={{ margin: 0, padding: 0, display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      <div style={{ margin: 0, background: '#111', color: '#ccc', height: '100%', width: '100%' }}>
         <FFTPlot websocketUrl="ws://localhost:8767" />
       </div>
       <div style={{ margin: 0, background: '#111', color: '#ccc', height: '10%', width: '100vw' }}>
