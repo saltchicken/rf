@@ -91,6 +91,7 @@ class Reader:
         return response
 
     async def update_settings(self):
+        print("Updating settings manually")
         settings = await self.get_current_settings()
         if settings.get("sample_rate") is not None:
             self.sample_rate = settings["sample_rate"]
@@ -105,9 +106,18 @@ class Reader:
         else:
             print("THIS WAS NONE WHY3")
 
-    def set_setting(self, setting, value):
+    async def set_setting(self, setting, value):
         self.req_socket.send_json({setting: value})
-        response = self.req_socket.recv_json()
+        response = await self.req_socket.recv_json()
+        if response["status"] != "ok":
+            raise Exception(f"Failed to set {setting} to {value}")
+        else:
+            print(f"Successfully set {setting} to {value}")
+            settings = response["settings"]
+            self.sample_rate = settings["sample_rate"]
+            self.center_freq = settings["center_freq"]
+            self.gain = settings["gain"]
+            print("Set all the things after modifying the receiver.")
         return response
 
 
