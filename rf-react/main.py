@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from rfanalyze import ReaderFFT, ReaderListener
+from rf import ReaderFFT, ReaderListener
 from pydantic import BaseModel
 
 app = FastAPI()
