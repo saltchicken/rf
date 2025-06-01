@@ -142,7 +142,7 @@ class Receiver:
                     self.sample_rate = float(message["sample_rate"])
                     self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.sample_rate)
 
-                response = {"status": "ok"}
+                response = {"status": "ok", "settings": self.get_current_settings()}
                 await self.rep_socket.send_json(response)
 
             except asyncio.CancelledError:
