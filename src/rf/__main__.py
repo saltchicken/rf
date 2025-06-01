@@ -27,7 +27,7 @@ def main():
         # For example: os.system("npm run build")
     else:
         # os.chdir(frontend_dir)
-        uvicorn.run("rf.frontend.main:app", host="127.0.0.1", port=5000)
+        uvicorn.run("rf.frontend.server:app", host="127.0.0.1", port=5000)
 
 
 if __name__ == "__main__":
