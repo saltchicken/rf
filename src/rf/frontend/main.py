@@ -48,12 +48,13 @@ app.add_middleware(
 )
 
 assets_path = Path(__file__).parent / "dist/assets"
+dist_path = Path(__file__).parent / "dist"
 app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
 
 @app.get("/")
 def serve_index():
-    return FileResponse("dist/index.html")
+    return FileResponse(dist_path / "index.html")
 
 
 class SettingPayload(BaseModel):
