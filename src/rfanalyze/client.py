@@ -267,13 +267,13 @@ class ReaderFFT(Reader):
         total_samples = []
         samples_recorded = 0
 
-        # TODO: Take a relook at this. Calling a whole request that may not be necessary and also may need to be updated later
-        settings = await self.get_current_settings()
-        freqs = np.fft.fftshift(
-            np.fft.fftfreq(self.fft_size, 1 / self.sample_rate)
-        ).astype(np.float32)
-        freqs += float(settings["center_freq"])
-        self.publisher.data = freqs.tolist()
+        # # TODO: Take a relook at this. Calling a whole request that may not be necessary and also may need to be updated later
+        # settings = await self.get_current_settings()
+        # freqs = np.fft.fftshift(
+        #     np.fft.fftfreq(self.fft_size, 1 / self.sample_rate)
+        # ).astype(np.float32)
+        # freqs += float(settings["center_freq"])
+        # self.publisher.data = freqs.tolist()
 
         while not self.stop_event.is_set():
             samples = await self.sample_queue.get()
@@ -288,7 +288,8 @@ class ReaderFFT(Reader):
                 total_samples = []
 
                 signal = Signal(samples, self.sample_rate)
-                fft = FFT(samples, self.sample_rate, freqs)
+                # fft = FFT(samples, self.sample_rate, freqs)
+                fft = FFT(samples, self.sample_rate)
                 fft.apply_gaussian_filter(2)
                 fft.apply_median_filter(5)
                 fft.apply_smooth_moving_average(5)

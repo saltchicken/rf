@@ -12,7 +12,6 @@ class Publisher:
         self.queue = asyncio.Queue(maxsize=1)
         self.message_queue = asyncio.Queue(maxsize=1)
         self.server_task = asyncio.create_task(self.start_server())
-        self.data = {"test": "testing"}
 
     async def handler(self, ws):
         async def receive_and_forward_message():
@@ -29,8 +28,9 @@ class Publisher:
             async for message in ws:
                 message = json.loads(message)
                 if message.get("type") == "init":
-                    print(f"Received message: {message.get('data')}")
-                    await ws.send(json.dumps({"type": "init", "data": self.data}))
+                    data = message.get("data")
+                    print(f"Received message: {data}")
+                    await ws.send(json.dumps({"type": "init", "data": data}))
                     # subscriber.setsockopt_string(zmq.SUBSCRIBE, message)
 
         try:
