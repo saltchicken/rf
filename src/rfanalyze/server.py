@@ -63,7 +63,7 @@ class Transceiver:
         self.sdr.setGain(SOAPY_SDR_RX, 0, self.gain)
 
         # TX configuration
-        self.sdr.setAntenna(SOAPY_SDR_TX, 0, "BAND1")  # Adjust for your SDR
+        self.sdr.setAntenna(SOAPY_SDR_TX, 0, "BAND2")  # Adjust for your SDR
         self.sdr.setSampleRate(SOAPY_SDR_TX, 0, self.sample_rate)
         self.sdr.setFrequency(SOAPY_SDR_TX, 0, self.center_freq)
         self.sdr.setGain(SOAPY_SDR_TX, 0, self.gain)
