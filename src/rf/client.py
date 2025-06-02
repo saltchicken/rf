@@ -277,7 +277,6 @@ class ReaderListener(Reader):
 
                     mid = len(fft.magnitude) // 2
                     fft.magnitude = fft.magnitude[mid:]
-                    print(len(fft.magnitude))
 
                     # Send FFT data
                     # TODO: This is what is hanging. Properly cancel connections from the UI
