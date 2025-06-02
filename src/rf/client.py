@@ -28,9 +28,9 @@ class Reader:
     def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.sample_rate = 2000000
-        self.center_freq = 106000000
-        self.freq_offset = 100000
+        self.sample_rate = None
+        self.center_freq = None
+        self.freq_offset = 100000  # TODO: Update this dynamically on create
         self.chunk_size = 4096
 
         self.stop_event = asyncio.Event()

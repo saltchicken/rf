@@ -14,10 +14,9 @@ async def lifespan(app: FastAPI):
     # Startup
     app.state.readerFFT = await ReaderFFT.create("10.0.0.5", 5000)
     app.state.readerListener = await ReaderListener.create("10.0.0.5", 5000)
+    print(app.state.readerFFT.center_freq)
     app.state.reader_task = asyncio.create_task(app.state.readerFFT.run())
     app.state.reader_task2 = asyncio.create_task(app.state.readerListener.run())
-    await app.state.readerFFT.update_settings()
-    await app.state.readerListener.update_settings()
     print("ReaderFFT tasks started.")
 
     yield
@@ -77,7 +76,9 @@ class XValue(BaseModel):
 @app.post("/api/selected_x")
 async def receive_x(value: XValue):
     print(f"Received x value: {value.x}")
-    offset = round(value.x - app.state.readerFFT.center_freq)
-    app.state.readerFFT.freq_offset = offset
-    app.state.readerListener.freq_offset = offset
+    # offset = round(value.x - app.state.readerFFT.center_freq)
+    # app.state.readerFFT.freq_offset = offset
+    # app.state.readerListener.freq_offset = offset
+    app.state.readerFFT.freq_offset = value.x
+    app.state.readerListener.freq_offset = value.x
     return {"status": "ok", "x_received": value.x}
