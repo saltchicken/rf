@@ -177,8 +177,12 @@ class ReaderRecorder(Reader):
 
 
 class ReaderListener(Reader):
-    def __init__(self, host, port):
+    def __init__(self, host, port, publisher_port):
         super().__init__(host, port)
+        self.publisher_port = publisher_port
+        self.publisher = Publisher(port=self.publisher_port)
+        self.previous_magnitude = None
+        self.ema_alpha = 0.3
         self.audio_sample_rate = 16000
         self.sample_buffer_len = 160000
         self.audio_frames_per_buffer = math.ceil(
@@ -226,10 +230,10 @@ class ReaderListener(Reader):
             stream.stop_stream()
             stream.close()
             p.terminate()
+            print("Audio process closed")
 
     async def listen_sample(self):
         try:
-            # audio_buffer = np.array([], dtype=np.int16)
             sample_buffer = np.array([], dtype=np.complex64)
             while not self.stop_event.is_set():
                 samples = await self.sample_queue.get()
@@ -248,10 +252,41 @@ class ReaderListener(Reader):
                     signal = Signal(samples, self.sample_rate)
                     signal.apply_freq_offset(self.freq_offset)
                     signal.apply_low_pass_filter(100e3)
+
+                    # Process audio
                     fm = FM(signal.samples, self.sample_rate)
                     fm.apply_fm_demodulation()
                     fm.apply_resample(self.audio_sample_rate)
                     fm.apply_de_emphasis_filter()
+
+                    # Create FFT from the demodulated audio signal
+                    fft = FFT(np.copy(fm.samples), self.audio_sample_rate)
+                    fft.apply_gaussian_filter(2)
+                    fft.apply_median_filter(5)
+                    fft.apply_smooth_moving_average(5)
+
+                    # Apply EMA smoothing
+                    smoothed = fft.apply_exponential_moving_average(
+                        self.previous_magnitude
+                        if hasattr(self, "previous_magnitude")
+                        else None,
+                        self.ema_alpha,
+                    )
+                    self.previous_magnitude = smoothed
+                    fft.magnitude = smoothed
+
+                    mid = len(fft.magnitude) // 2
+                    fft.magnitude = fft.magnitude[mid:]
+                    print(len(fft.magnitude))
+
+                    # Send FFT data
+                    data = fft.magnitude.tobytes()
+                    try:
+                        self.publisher.queue.put_nowait(data)
+                    except asyncio.QueueFull:
+                        print("Queue full. Dropping frame.")
+
+                    # Complete audio processing
                     fm.apply_normalization()
                     fm.apply_volume(0.25)
                     fm.convert_to_int16()
@@ -261,6 +296,7 @@ class ReaderListener(Reader):
                         self.audio_queue.put_nowait(fm.samples)
                     except queue.Full:
                         print("Audio Queue full. Dropping frame.")
+
         except asyncio.CancelledError:
             print("Cancelled record_sample.")
         except Exception as e:

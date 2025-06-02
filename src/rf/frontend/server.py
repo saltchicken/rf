@@ -16,15 +16,11 @@ async def lifespan(app: FastAPI):
     app.state.readerFFT = ReaderFFT("10.0.0.5", 5000, publisher_port=8767)
     await app.state.controller.update_settings(app.state.readerFFT)
 
-    app.state.readerFFT2 = ReaderFFT("10.0.0.5", 5000, publisher_port=8768)
-    await app.state.controller.update_settings(app.state.readerFFT2)
-
-    app.state.readerListener = ReaderListener("10.0.0.5", 5000)
+    app.state.readerListener = ReaderListener("10.0.0.5", 5000, publisher_port=8768)
     await app.state.controller.update_settings(app.state.readerListener)
 
     app.state.reader_task = asyncio.create_task(app.state.readerFFT.run())
     app.state.reader_task2 = asyncio.create_task(app.state.readerListener.run())
-    app.state.reader_task3 = asyncio.create_task(app.state.readerFFT2.run())
     print("ReaderFFT tasks started.")
 
     yield
@@ -41,7 +37,6 @@ async def lifespan(app: FastAPI):
 
     await cancel_task(app.state.reader_task, "ReaderFFT")
     await cancel_task(app.state.reader_task2, "ReaderListener")
-    await cancel_task(app.state.reader_task3, "ReaderFFT2")
 
 
 app = FastAPI(lifespan=lifespan)
