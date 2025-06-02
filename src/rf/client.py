@@ -280,6 +280,7 @@ class ReaderListener(Reader):
                     print(len(fft.magnitude))
 
                     # Send FFT data
+                    # TODO: This is what is hanging. Properly cancel connections from the UI
                     data = fft.magnitude.tobytes()
                     try:
                         self.publisher.queue.put_nowait(data)
