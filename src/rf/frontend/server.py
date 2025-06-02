@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from rf import ReaderFFT, ReaderListener
+from rf import ReaderFFT, ReaderListener, Controller
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
@@ -12,9 +12,13 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    app.state.readerFFT = await ReaderFFT.create("10.0.0.5", 5000)
-    app.state.readerListener = await ReaderListener.create("10.0.0.5", 5000)
-    print(app.state.readerFFT.center_freq)
+    app.state.controller = Controller("10.0.0.5", 5001)
+    app.state.readerFFT = ReaderFFT("10.0.0.5", 5000)
+    await app.state.controller.update_settings(app.state.readerFFT)
+
+    app.state.readerListener = ReaderListener("10.0.0.5", 5000)
+    await app.state.controller.update_settings(app.state.readerListener)
+
     app.state.reader_task = asyncio.create_task(app.state.readerFFT.run())
     app.state.reader_task2 = asyncio.create_task(app.state.readerListener.run())
     print("ReaderFFT tasks started.")
@@ -63,7 +67,7 @@ class SettingPayload(BaseModel):
 
 @app.post("/api/set-setting")
 async def button_click(setting: SettingPayload):
-    response = await app.state.readerFFT.set_setting(setting.setting, setting.value)
+    response = await app.state.controller.set_setting(setting.setting, setting.value)
     if setting.setting == "center_freq":
         await app.state.readerFFT.publisher.message_queue.put(setting.value)
     return {"message": f"{response}"}

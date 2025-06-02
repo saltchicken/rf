@@ -1,1 +1,1 @@
-from .client import ReaderListener, ReaderRecorder, ReaderFFT
+from .client import ReaderListener, ReaderRecorder, ReaderFFT, Controller

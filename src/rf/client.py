@@ -24,6 +24,50 @@ def complex_from_bytes(data):
     return samples[0::2] + 1j * samples[1::2]
 
 
+class Controller:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.ctx = zmq.asyncio.Context()
+        self.req_socket = self.ctx.socket(zmq.REQ)
+        self.req_socket.connect(f"tcp://{self.host}:{self.port}")
+
+    def get_current_settings(self):
+        self.req_socket.send_json({"settings": True})
+        response = self.req_socket.recv_json()
+        return response
+
+    async def update_settings(self, reader):
+        print("Updating settings manually")
+        settings = await self.get_current_settings()
+        if settings.get("sample_rate") is not None:
+            reader.sample_rate = settings["sample_rate"]
+        else:
+            print("THIS WAS NONE WHY1")
+        if settings.get("center_freq") is not None:
+            reader.center_freq = settings["center_freq"]
+        else:
+            print("THIS WAS NONE WHY2")
+        if settings.get("gain") is not None:
+            reader.gain = settings["gain"]
+        else:
+            print("THIS WAS NONE WHY3")
+
+    async def set_setting(self, setting, value):
+        self.req_socket.send_json({setting: value})
+        response = await self.req_socket.recv_json()
+        if response["status"] != "ok":
+            raise Exception(f"Failed to set {setting} to {value}")
+        else:
+            print(f"Successfully set {setting} to {value}")
+            settings = response["settings"]
+            self.sample_rate = settings["sample_rate"]
+            self.center_freq = settings["center_freq"]
+            self.gain = settings["gain"]
+            print("Set all the things after modifying the receiver.")
+        return response
+
+
 class Reader:
     def __init__(self, host, port):
         self.host = host
@@ -38,15 +82,11 @@ class Reader:
 
         self.ctx = zmq.asyncio.Context()
 
-        self.req_socket = self.ctx.socket(zmq.REQ)
-        # TODO: Figure out how to set port better
-        self.req_socket.connect(f"tcp://{self.host}:5001")
-
-    @classmethod
-    async def create(cls, host, port):
-        reader = cls(host, port)
-        await reader.update_settings()
-        return reader
+    # @classmethod
+    # async def create(cls, host, port):
+    #     reader = cls(host, port)
+    #     await reader.update_settings()
+    #     return reader
 
     async def receive_samples(self):
         socket = self.ctx.socket(zmq.SUB)
@@ -73,7 +113,8 @@ class Reader:
                     try:
                         self.sample_queue.put_nowait(buffer[: self.chunk_size])
                     except asyncio.QueueFull:
-                        print("Queue full. Dropping frame.")
+                        pass
+                        # print("Queue full. Dropping frame.")
 
                     buffer = buffer[self.chunk_size :]
                     if buffer.shape != (0,):
@@ -88,43 +129,7 @@ class Reader:
 
     def close(self):
         self.stop_event.set()
-        self.req_socket.close(linger=0)
         self.ctx.term()
-
-    def get_current_settings(self):
-        self.req_socket.send_json({"settings": True})
-        response = self.req_socket.recv_json()
-        return response
-
-    async def update_settings(self):
-        print("Updating settings manually")
-        settings = await self.get_current_settings()
-        if settings.get("sample_rate") is not None:
-            self.sample_rate = settings["sample_rate"]
-        else:
-            print("THIS WAS NONE WHY1")
-        if settings.get("center_freq") is not None:
-            self.center_freq = settings["center_freq"]
-        else:
-            print("THIS WAS NONE WHY2")
-        if settings.get("gain") is not None:
-            self.gain = settings["gain"]
-        else:
-            print("THIS WAS NONE WHY3")
-
-    async def set_setting(self, setting, value):
-        self.req_socket.send_json({setting: value})
-        response = await self.req_socket.recv_json()
-        if response["status"] != "ok":
-            raise Exception(f"Failed to set {setting} to {value}")
-        else:
-            print(f"Successfully set {setting} to {value}")
-            settings = response["settings"]
-            self.sample_rate = settings["sample_rate"]
-            self.center_freq = settings["center_freq"]
-            self.gain = settings["gain"]
-            print("Set all the things after modifying the receiver.")
-        return response
 
 
 class ReaderRecorder(Reader):
