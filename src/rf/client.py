@@ -277,11 +277,11 @@ class ReaderListener(Reader):
 
 
 class ReaderFFT(Reader):
-    def __init__(self, host, port):
+    def __init__(self, host, port, publisher_port):
         super().__init__(host, port)
         self.fft_size = 1024
 
-        self.publisher_port = 8767  # TODO: Set this dynamically
+        self.publisher_port = publisher_port
         self.publisher = Publisher(port=self.publisher_port)
         self.previous_magnitude = None
         self.ema_alpha = 0.3
